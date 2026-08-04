@@ -11,7 +11,7 @@
       html,
       body {
         margin: 0;
-        width: 456px;
+        width: 500px;
         height: 420px;
         overflow: hidden;
         background: transparent;
@@ -22,7 +22,7 @@
 
       .layout {
         display: flex;
-        width: 456px;
+        width: 500px;
         height: 420px;
         align-items: flex-end;
       }
@@ -194,8 +194,8 @@
       }
 
       .mascot {
-        width: 96px;
-        height: 256px;
+        width: 140px;
+        height: 180px;
         cursor: move;
         flex-shrink: 0;
         position: relative;
@@ -204,16 +204,66 @@
         justify-content: center;
       }
 
+      .mascot-stage {
+        position: relative;
+        width: 140px;
+        height: 180px;
+      }
+
       .mascot img {
-        width: 96px;
-        height: 256px;
+        position: absolute;
+        left: 0;
+        bottom: 0;
+        width: 140px;
+        height: 180px;
         object-fit: contain;
-        object-position: bottom center;
+        object-position: center bottom;
         pointer-events: none;
         display: block;
-        transform-origin: 50% 92%;
-        will-change: transform;
+        transform-origin: 50% 85%;
+        will-change: transform, opacity, filter;
         animation: eva-idle 3.6s ease-in-out infinite;
+        opacity: 0;
+        transition: opacity 0.28s ease, filter 0.28s ease, transform 0.28s ease;
+        filter: blur(0px);
+      }
+
+      .mascot img.show {
+        opacity: 1;
+      }
+
+      .mascot.switching img.show {
+        animation: none;
+      }
+
+      .mascot.switching img.fade-out {
+        opacity: 0;
+        filter: blur(2px);
+        transform: scaleX(-1) scale(0.94);
+      }
+
+      .mascot.switching img.fade-in {
+        opacity: 1;
+        filter: blur(0);
+        transform: scaleX(-1) scale(1);
+        animation: eva-expr-pop 0.34s ease-out;
+      }
+
+      @keyframes eva-expr-pop {
+        0% {
+          transform: scaleX(-1) scale(0.92);
+          filter: blur(2.5px);
+          opacity: 0;
+        }
+        60% {
+          transform: scaleX(-1) scale(1.03);
+          filter: blur(0);
+          opacity: 1;
+        }
+        100% {
+          transform: scaleX(-1) scale(1);
+          opacity: 1;
+        }
       }
 
       .mascot::after {
@@ -229,6 +279,7 @@
         filter: blur(1px);
         pointer-events: none;
         animation: eva-shadow 3.6s ease-in-out infinite;
+        z-index: 2;
       }
 
       .mascot.dragging img,
@@ -236,7 +287,7 @@
         animation: none;
       }
 
-      .mascot.thinking img {
+      .mascot.thinking img.show {
         animation: eva-think 0.9s ease-in-out infinite;
       }
 
@@ -244,7 +295,19 @@
         animation: eva-shadow-think 0.9s ease-in-out infinite;
       }
 
-      .mascot.happy img {
+      .mascot.confused img.show {
+        animation: eva-think 1.1s ease-in-out infinite;
+      }
+
+      .mascot.confused::after {
+        animation: eva-shadow-think 1.1s ease-in-out infinite;
+      }
+
+      .mascot.shy img.show {
+        animation: eva-idle 4s ease-in-out infinite;
+      }
+
+      .mascot.happy img.show {
         animation: eva-happy 0.7s ease-out 1;
       }
 
@@ -345,6 +408,8 @@
         .mascot img,
         .mascot::after {
           animation: none !important;
+          transition: none !important;
+          filter: none !important;
         }
       }
     </style>
@@ -379,15 +444,24 @@
             </button>
           </div>
         </div>
-        <div class="hint">Uses recent chat + transcript for follow-ups. Language follows dropdown.</div>
+        <div class="hint">Postgres KB → Tavily miss → save → Ollama. Language follows dropdown.</div>
       </div>
       <div class="mascot" id="mascot" title="Drag to move">
-        <img
-          src="../assets/anime-girl-mascot-transparent.png"
-          alt="Eva"
-          draggable="false"
-          onerror="this.src='../assets/anime-girl-mascot.png'"
-        />
+        <div class="mascot-stage">
+          <img
+            id="mascotImgA"
+            class="show"
+            src="../assets/anime-girl-mascot-half.png?v=6"
+            alt="Eva"
+            draggable="false"
+          />
+          <img
+            id="mascotImgB"
+            src="../assets/anime-girl-mascot-half.png?v=6"
+            alt=""
+            draggable="false"
+          />
+        </div>
       </div>
     </div>
     <script>
@@ -398,6 +472,8 @@
       const clearBtn = document.getElementById("clear");
       const langEl = document.getElementById("lang");
       const mascot = document.getElementById("mascot");
+      const mascotImgA = document.getElementById("mascotImgA");
+      const mascotImgB = document.getElementById("mascotImgB");
 
       const history = [];
       const MAX_CONTEXT_TURNS = 16; // sent to Ollama for continuity
@@ -405,17 +481,118 @@
 
       let dragging = false;
       let moodTimer = null;
+      let idleExprTimer = null;
+      let exprName = "idle";
+      let frontIsA = true;
+      let switching = false;
+
+      const EXPR = {
+        idle: "../assets/anime-girl-mascot-half.png?v=6",
+        thinking: "../assets/eva-expr-thinking.png?v=6",
+        happy: "../assets/eva-expr-happy.png?v=6",
+        confused: "../assets/eva-expr-confused.png?v=6",
+        shy: "../assets/eva-expr-shy.png?v=6",
+      };
+
+      Object.values(EXPR).forEach((src) => {
+        const im = new Image();
+        im.src = src;
+      });
+
+      function frontImg() {
+        return frontIsA ? mascotImgA : mascotImgB;
+      }
+
+      function backImg() {
+        return frontIsA ? mascotImgB : mascotImgA;
+      }
+
+      function setExpression(name) {
+        const src = EXPR[name] || EXPR.idle;
+        if (src === (EXPR[exprName] || EXPR.idle) && !switching) return;
+        if (switching) {
+          // hard cut if spammed
+          const f = frontImg();
+          f.src = src;
+          exprName = name;
+          return;
+        }
+
+        const from = frontImg();
+        const to = backImg();
+        switching = true;
+        mascot.classList.add("switching");
+
+        to.src = src;
+        to.classList.remove("show", "fade-out");
+        to.classList.add("fade-in");
+        from.classList.remove("fade-in");
+        from.classList.add("fade-out");
+
+        // ensure next paint applies classes
+        requestAnimationFrame(() => {
+          to.classList.add("show");
+        });
+
+        window.setTimeout(() => {
+          from.classList.remove("show", "fade-out", "fade-in");
+          to.classList.remove("fade-in", "fade-out");
+          to.classList.add("show");
+          frontIsA = !frontIsA;
+          exprName = name;
+          switching = false;
+          mascot.classList.remove("switching");
+        }, 320);
+      }
 
       function setMood(mood, ms) {
-        mascot.classList.remove("thinking", "happy", "dragging");
-        if (mood) mascot.classList.add(mood);
+        mascot.classList.remove("thinking", "happy", "dragging", "confused", "shy");
         if (moodTimer) clearTimeout(moodTimer);
+        if (idleExprTimer) clearTimeout(idleExprTimer);
+
+        if (mood === "thinking") {
+          mascot.classList.add("thinking");
+          setExpression("thinking");
+        } else if (mood === "happy") {
+          mascot.classList.add("happy");
+          setExpression("happy");
+        } else if (mood === "confused") {
+          mascot.classList.add("confused");
+          setExpression("confused");
+        } else if (mood === "shy") {
+          mascot.classList.add("shy");
+          setExpression("shy");
+        } else if (mood === "dragging") {
+          mascot.classList.add("dragging");
+          setExpression("shy");
+        } else {
+          setExpression("idle");
+        }
+
         if (ms) {
           moodTimer = setTimeout(() => {
-            mascot.classList.remove("thinking", "happy");
+            mascot.classList.remove("thinking", "happy", "confused", "shy");
+            setExpression("idle");
+            scheduleIdleExpression();
           }, ms);
+        } else if (!mood || mood === "dragging") {
+          // keep
+        } else if (mood === "thinking") {
+          // stays until cleared
+        } else {
+          scheduleIdleExpression();
         }
       }
+
+      function scheduleIdleExpression() {
+        if (idleExprTimer) clearTimeout(idleExprTimer);
+        idleExprTimer = setTimeout(() => {
+          if (dragging || mascot.classList.contains("thinking")) return;
+          setMood("shy", 1800);
+        }, 9000 + Math.random() * 12000);
+      }
+
+      scheduleIdleExpression();
 
       function nowTs() {
         return new Date().toISOString();
@@ -518,12 +695,12 @@
           mascot.releasePointerCapture(e.pointerId);
         } catch (_) {}
         window.companion.dragEnd();
-        setMood("happy", 700);
+        setMood("happy", 1200);
       });
 
       mascot.addEventListener("dblclick", () => {
         if (dragging) return;
-        setMood("happy", 700);
+        setMood("happy", 1200);
       });
 
       clearBtn.addEventListener("click", async () => {
@@ -555,17 +732,30 @@
         setMood("thinking");
         const thinking = document.createElement("div");
         thinking.className = "msg eva muted";
-        thinking.textContent = "Eva is thinking...";
+        thinking.dataset.progress = "1";
+        thinking.textContent = "Eva 正在處理…";
         responseEl.appendChild(thinking);
         responseEl.scrollTop = responseEl.scrollHeight;
 
+        const offProgress =
+          typeof window.companion.onProgress === "function"
+            ? window.companion.onProgress((info) => {
+                const msg = String(info?.message || "").trim();
+                if (!msg || info?.stage === "done") return;
+                thinking.textContent = msg;
+                responseEl.scrollTop = responseEl.scrollHeight;
+              })
+            : () => {};
+
         try {
           const answer = await window.companion.askChat(contextForModel());
+          offProgress();
           history.push({ role: "assistant", content: answer, ts: nowTs() });
           await persist();
           renderChat();
-          setMood("happy", 700);
+          setMood("happy", 1200);
         } catch (err) {
+          offProgress();
           history.push({
             role: "assistant",
             content: String(err?.message || err),
@@ -573,7 +763,7 @@
           });
           await persist();
           renderChat();
-          setMood(null);
+          setMood("confused", 1800);
         } finally {
           sendBtn.disabled = false;
           promptEl.focus();
@@ -619,7 +809,7 @@
           });
           await persist();
           renderChat();
-          setMood("happy", 700);
+          setMood("happy", 1200);
         } catch (err) {
           history.pop();
           history.push({
@@ -629,7 +819,7 @@
           });
           await persist();
           renderChat();
-          setMood(null);
+          setMood("confused", 1800);
         } finally {
           applyBtn.disabled = false;
           sendBtn.disabled = false;

@@ -8,12 +8,17 @@
     "test": "vitest run",
     "self-improve": "tsx --env-file=.env src/self-improve.ts",
     "typecheck": "tsc --noEmit",
-    "overlay": "electron .",
-    "companion": "electron ."
+    "overlay": "node overlay/scripts/run-overlay.cjs",
+    "companion": "node overlay/scripts/run-overlay.cjs",
+    "overlay:once": "electron .",
+    "kb:up": "docker compose up -d",
+    "kb:down": "docker compose down",
+    "kb:init": "node overlay/scripts/init-kb-db.cjs"
   },
   "dependencies": {
     "@cursor/sdk": "^1.0.0",
     "opencc-js": "^1.4.1",
+    "pg": "^8.22.0",
     "sharp": "^0.35.3"
   },
   "devDependencies": {

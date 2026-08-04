@@ -1,0 +1,17 @@
+services:
+  eva-postgres:
+    image: postgres:16-alpine
+    container_name: eva-postgres
+    restart: unless-stopped
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: eva
+      POSTGRES_PASSWORD: eva
+      POSTGRES_DB: eva_kb
+    volumes:
+      - eva_pg_data:/var/lib/postgresql/data
+      - ./overlay/sql/001_knowledge_base.sql:/docker-entrypoint-initdb.d/001_knowledge_base.sql:ro
+
+volumes:
+  eva_pg_data:
