@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline';"
+    />
+    <title>Ask Copilot</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        width: 360px;
+        height: 420px;
+        background: #ffffff;
+        font: 13px/1.4 "Segoe UI", sans-serif;
+        color: #1f2937;
+      }
+
+      .panel {
+        box-sizing: border-box;
+        width: 100%;
+        height: 100%;
+        padding: 12px;
+        background: #ffffff;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        -webkit-app-region: drag;
+      }
+
+      .top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 14px;
+        font-weight: 650;
+      }
+
+      .close {
+        -webkit-app-region: no-drag;
+        border: 0;
+        background: #f1f5f9;
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+        font-size: 18px;
+        line-height: 1;
+        cursor: pointer;
+        color: #64748b;
+      }
+
+      .response {
+        -webkit-app-region: no-drag;
+        flex: 1;
+        overflow: auto;
+        padding: 10px;
+        border-radius: 12px;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        white-space: pre-wrap;
+        word-break: break-word;
+        color: #0f172a;
+      }
+
+      .response.muted {
+        color: #64748b;
+      }
+
+      .row {
+        -webkit-app-region: no-drag;
+        display: flex;
+        gap: 8px;
+      }
+
+      textarea {
+        flex: 1;
+        resize: none;
+        height: 64px;
+        padding: 8px 10px;
+        border-radius: 10px;
+        border: 1px solid #cbd5e1;
+        font: inherit;
+        outline: none;
+      }
+
+      textarea:focus {
+        border-color: #6366f1;
+      }
+
+      button.send {
+        width: 72px;
+        border: 0;
+        border-radius: 10px;
+        background: #4f46e5;
+        color: white;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      button.send:disabled {
+        opacity: 0.55;
+        cursor: default;
+      }
+
+      .hint {
+        font-size: 11px;
+        color: #94a3b8;
+        -webkit-app-region: no-drag;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="panel">
+      <div class="top">
+        <h1>Ask Copilot</h1>
+      </div>
+      <div id="response" class="response muted">
+        Prompt stays open. Drag the mascot (96×256, mirrored) to move it.
+        Type a question below, then Send.
+      </div>
+      <div class="row">
+        <textarea id="prompt" placeholder="Type your question..."></textarea>
+        <button class="send" id="send" type="button">Send</button>
+      </div>
+      <div class="hint">Searches with TAVILY_API_KEY from .env, then optionally summarizes via Cursor.</div>
+    </div>
+    <script>
+      const responseEl = document.getElementById("response");
+      const promptEl = document.getElementById("prompt");
+      const sendBtn = document.getElementById("send");
+
+      async function send() {
+        const prompt = promptEl.value.trim();
+        if (!prompt) return;
+        sendBtn.disabled = true;
+        responseEl.classList.remove("muted");
+        responseEl.textContent = "Thinking...";
+        try {
+          const answer = await window.companion.askCopilot(prompt);
+          responseEl.textContent = answer;
+        } catch (err) {
+          responseEl.textContent = String(err?.message || err);
+        } finally {
+          sendBtn.disabled = false;
+          promptEl.focus();
+        }
+      }
+
+      sendBtn.addEventListener("click", send);
+      promptEl.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          send();
+        }
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; script-src 'self' 'unsafe-inline';"
+    />
+    <title>Companion</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        width: 96px;
+        height: 256px;
+        overflow: hidden;
+        background: transparent;
+        user-select: none;
+        cursor: move;
+      }
+
+      img {
+        width: 96px;
+        height: 256px;
+        object-fit: contain;
+        object-position: bottom center;
+        pointer-events: none;
+        display: block;
+        /* Mirror horizontally */
+        transform: scaleX(-1);
+      }
+    </style>
+  </head>
+  <body title="Drag to move">
+    <img
+      src="../assets/anime-girl-mascot-transparent.png"
+      alt="Companion"
+      draggable="false"
+      onerror="this.src='../assets/anime-girl-mascot.png'"
+    />
+    <script>
+      let dragging = false;
+      let startX = 0;
+      let startY = 0;
+
+      document.body.addEventListener("mousedown", (e) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        dragging = true;
+        startX = e.screenX;
+        startY = e.screenY;
+        window.companion.dragStart(e.screenX, e.screenY);
+        document.body.setPointerCapture(e.pointerId);
+      });
+
+      document.body.addEventListener("pointermove", (e) => {
+        if (!dragging) return;
+        window.companion.dragMove(e.screenX, e.screenY);
+      });
+
+      document.body.addEventListener("pointerup", (e) => {
+        if (!dragging) return;
+        dragging = false;
+        try {
+          document.body.releasePointerCapture(e.pointerId);
+        } catch (_) {}
+        window.companion.dragEnd();
+      });
+    </script>
+  </body>
+</html>

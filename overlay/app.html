@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; script-src 'self' 'unsafe-inline';"
+    />
+    <title>Eva</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        width: 456px;
+        height: 420px;
+        overflow: hidden;
+        background: transparent;
+        font: 13px/1.4 "Segoe UI", sans-serif;
+        color: #1f2937;
+        user-select: none;
+      }
+
+      .layout {
+        display: flex;
+        width: 456px;
+        height: 420px;
+        align-items: flex-end;
+      }
+
+      .panel {
+        box-sizing: border-box;
+        width: 360px;
+        height: 420px;
+        padding: 12px;
+        background: #ffffff;
+        border-radius: 16px 0 0 16px;
+        border: 1px solid #e2e8f0;
+        border-right: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+      }
+
+      .top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        -webkit-app-region: drag;
+        cursor: move;
+      }
+
+      .top-actions {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        -webkit-app-region: no-drag;
+      }
+
+      .lang {
+        border: 1px solid #e2e8f0;
+        background: #f8fafc;
+        color: #475569;
+        border-radius: 8px;
+        padding: 3px 6px;
+        font-size: 11px;
+        cursor: pointer;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 14px;
+        font-weight: 650;
+      }
+
+      .clear {
+        border: 0;
+        background: #f1f5f9;
+        color: #64748b;
+        border-radius: 8px;
+        padding: 4px 8px;
+        font-size: 11px;
+        cursor: pointer;
+      }
+
+      .response {
+        flex: 1;
+        overflow: auto;
+        padding: 10px;
+        border-radius: 12px;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        white-space: pre-wrap;
+        word-break: break-word;
+        color: #0f172a;
+        user-select: text;
+      }
+
+      .response.muted {
+        color: #64748b;
+      }
+
+      .msg {
+        margin: 0 0 10px;
+      }
+
+      .msg .meta {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        align-items: baseline;
+        margin-bottom: 2px;
+      }
+
+      .msg .who {
+        font-size: 11px;
+        font-weight: 650;
+        color: #64748b;
+      }
+
+      .msg .ts {
+        font-size: 10px;
+        color: #94a3b8;
+        white-space: nowrap;
+      }
+
+      .msg.you .who {
+        color: #4f46e5;
+      }
+
+      .msg.eva .who {
+        color: #db2777;
+      }
+
+      .row {
+        display: flex;
+        gap: 8px;
+        align-items: stretch;
+      }
+
+      .actions {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      textarea {
+        flex: 1;
+        resize: none;
+        height: 64px;
+        padding: 8px 10px;
+        border-radius: 10px;
+        border: 1px solid #cbd5e1;
+        font: inherit;
+        outline: none;
+        user-select: text;
+      }
+
+      textarea:focus {
+        border-color: #6366f1;
+      }
+
+      button.send,
+      button.apply {
+        width: 88px;
+        border: 0;
+        border-radius: 10px;
+        color: white;
+        font-weight: 600;
+        cursor: pointer;
+        padding: 8px 6px;
+        font-size: 12px;
+      }
+
+      button.send {
+        background: #4f46e5;
+        flex: 1;
+      }
+
+      button.apply {
+        background: #0f766e;
+      }
+
+      button.send:disabled,
+      button.apply:disabled {
+        opacity: 0.55;
+        cursor: default;
+      }
+
+      .hint {
+        font-size: 11px;
+        color: #94a3b8;
+      }
+
+      .mascot {
+        width: 96px;
+        height: 256px;
+        cursor: move;
+        flex-shrink: 0;
+        position: relative;
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+      }
+
+      .mascot img {
+        width: 96px;
+        height: 256px;
+        object-fit: contain;
+        object-position: bottom center;
+        pointer-events: none;
+        display: block;
+        transform-origin: 50% 92%;
+        will-change: transform;
+        animation: eva-idle 3.6s ease-in-out infinite;
+      }
+
+      .mascot::after {
+        content: "";
+        position: absolute;
+        left: 50%;
+        bottom: 6px;
+        width: 46px;
+        height: 10px;
+        border-radius: 50%;
+        background: rgba(15, 23, 42, 0.18);
+        transform: translateX(-50%);
+        filter: blur(1px);
+        pointer-events: none;
+        animation: eva-shadow 3.6s ease-in-out infinite;
+      }
+
+      .mascot.dragging img,
+      .mascot.dragging::after {
+        animation: none;
+      }
+
+      .mascot.thinking img {
+        animation: eva-think 0.9s ease-in-out infinite;
+      }
+
+      .mascot.thinking::after {
+        animation: eva-shadow-think 0.9s ease-in-out infinite;
+      }
+
+      .mascot.happy img {
+        animation: eva-happy 0.7s ease-out 1;
+      }
+
+      .mascot.happy::after {
+        animation: eva-shadow-happy 0.7s ease-out 1;
+      }
+
+      @keyframes eva-idle {
+        0%,
+        100% {
+          transform: scaleX(-1) translateY(0) rotate(-1.2deg);
+        }
+        50% {
+          transform: scaleX(-1) translateY(-7px) rotate(1.4deg);
+        }
+      }
+
+      @keyframes eva-shadow {
+        0%,
+        100% {
+          transform: translateX(-50%) scale(1);
+          opacity: 0.35;
+        }
+        50% {
+          transform: translateX(-50%) scale(0.82);
+          opacity: 0.2;
+        }
+      }
+
+      @keyframes eva-think {
+        0%,
+        100% {
+          transform: scaleX(-1) translateY(0) rotate(-2deg);
+        }
+        35% {
+          transform: scaleX(-1) translateY(-10px) rotate(2.5deg);
+        }
+        70% {
+          transform: scaleX(-1) translateY(-3px) rotate(-1deg);
+        }
+      }
+
+      @keyframes eva-shadow-think {
+        0%,
+        100% {
+          transform: translateX(-50%) scale(1);
+          opacity: 0.35;
+        }
+        35% {
+          transform: translateX(-50%) scale(0.72);
+          opacity: 0.16;
+        }
+        70% {
+          transform: translateX(-50%) scale(0.9);
+          opacity: 0.28;
+        }
+      }
+
+      @keyframes eva-happy {
+        0% {
+          transform: scaleX(-1) translateY(0) scale(1);
+        }
+        30% {
+          transform: scaleX(-1) translateY(-16px) scale(1.05);
+        }
+        55% {
+          transform: scaleX(-1) translateY(-2px) scale(0.98);
+        }
+        75% {
+          transform: scaleX(-1) translateY(-8px) scale(1.02);
+        }
+        100% {
+          transform: scaleX(-1) translateY(0) scale(1);
+        }
+      }
+
+      @keyframes eva-shadow-happy {
+        0%,
+        100% {
+          transform: translateX(-50%) scale(1);
+          opacity: 0.35;
+        }
+        30% {
+          transform: translateX(-50%) scale(0.65);
+          opacity: 0.14;
+        }
+        55% {
+          transform: translateX(-50%) scale(0.95);
+          opacity: 0.32;
+        }
+        75% {
+          transform: translateX(-50%) scale(0.78);
+          opacity: 0.2;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .mascot img,
+        .mascot::after {
+          animation: none !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="layout">
+      <div class="panel">
+        <div class="top">
+          <h1>Eva</h1>
+          <div class="top-actions">
+            <select class="lang" id="lang" title="Reply language (saved across restarts)">
+              <option value="zh-Hant">繁中</option>
+              <option value="zh-Hans">简中</option>
+              <option value="en">EN</option>
+              <option value="auto">Auto</option>
+            </select>
+            <button class="clear" id="clear" type="button" title="Clear saved chat history">Clear</button>
+          </div>
+        </div>
+        <div id="response" class="response muted">Loading chat history…</div>
+        <div class="row">
+          <textarea id="prompt" placeholder="Talk to Eva..."></textarea>
+          <div class="actions">
+            <button class="send" id="send" type="button">Send</button>
+            <button
+              class="apply"
+              id="apply"
+              type="button"
+              title="Use Cursor Agent to apply code changes from this chat"
+            >
+              Apply with Cursor
+            </button>
+          </div>
+        </div>
+        <div class="hint">Uses recent chat + transcript for follow-ups. Language follows dropdown.</div>
+      </div>
+      <div class="mascot" id="mascot" title="Drag to move">
+        <img
+          src="../assets/anime-girl-mascot-transparent.png"
+          alt="Eva"
+          draggable="false"
+          onerror="this.src='../assets/anime-girl-mascot.png'"
+        />
+      </div>
+    </div>
+    <script>
+      const responseEl = document.getElementById("response");
+      const promptEl = document.getElementById("prompt");
+      const sendBtn = document.getElementById("send");
+      const applyBtn = document.getElementById("apply");
+      const clearBtn = document.getElementById("clear");
+      const langEl = document.getElementById("lang");
+      const mascot = document.getElementById("mascot");
+
+      const history = [];
+      const MAX_CONTEXT_TURNS = 16; // sent to Ollama for continuity
+      const MAX_STORED = 500;
+
+      let dragging = false;
+      let moodTimer = null;
+
+      function setMood(mood, ms) {
+        mascot.classList.remove("thinking", "happy", "dragging");
+        if (mood) mascot.classList.add(mood);
+        if (moodTimer) clearTimeout(moodTimer);
+        if (ms) {
+          moodTimer = setTimeout(() => {
+            mascot.classList.remove("thinking", "happy");
+          }, ms);
+        }
+      }
+
+      function nowTs() {
+        return new Date().toISOString();
+      }
+
+      function formatTs(ts) {
+        if (!ts) return "";
+        try {
+          const d = new Date(ts);
+          if (Number.isNaN(d.getTime())) return String(ts);
+          return d.toLocaleString(undefined, {
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          });
+        } catch {
+          return String(ts);
+        }
+      }
+
+      function trimStored() {
+        while (history.length > MAX_STORED) history.shift();
+      }
+
+      async function persist() {
+        trimStored();
+        try {
+          await window.companion.saveChatHistory(history);
+        } catch (err) {
+          console.warn("save history failed", err);
+        }
+      }
+
+      function contextForModel() {
+        return history
+          .filter((m) => m.role === "user" || m.role === "assistant")
+          .filter((m) => {
+            const c = String(m.content ?? "");
+            return (
+              !c.startsWith("Applying with Cursor") &&
+              !c.startsWith("Cursor apply result:") &&
+              !c.startsWith("Cursor apply failed:")
+            );
+          })
+          .slice(-MAX_CONTEXT_TURNS);
+      }
+
+      function renderChat() {
+        if (!history.length) {
+          responseEl.classList.add("muted");
+          responseEl.textContent =
+            "Hi, I'm Eva. Chat history is saved across restarts.\nDrag the title or mascot to move. Type below, then Send.";
+          return;
+        }
+        responseEl.classList.remove("muted");
+        responseEl.innerHTML = "";
+        for (const m of history) {
+          const div = document.createElement("div");
+          div.className = "msg " + (m.role === "user" ? "you" : "eva");
+          const meta = document.createElement("div");
+          meta.className = "meta";
+          const who = document.createElement("div");
+          who.className = "who";
+          who.textContent = m.role === "user" ? "You" : "Eva";
+          const ts = document.createElement("div");
+          ts.className = "ts";
+          ts.textContent = formatTs(m.ts);
+          meta.appendChild(who);
+          meta.appendChild(ts);
+          const body = document.createElement("div");
+          body.textContent = m.content;
+          div.appendChild(meta);
+          div.appendChild(body);
+          responseEl.appendChild(div);
+        }
+        responseEl.scrollTop = responseEl.scrollHeight;
+      }
+
+      mascot.addEventListener("mousedown", (e) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        dragging = true;
+        setMood("dragging");
+        window.companion.dragStart(e.screenX, e.screenY);
+        mascot.setPointerCapture(e.pointerId);
+      });
+
+      mascot.addEventListener("pointermove", (e) => {
+        if (!dragging) return;
+        window.companion.dragMove(e.screenX, e.screenY);
+      });
+
+      mascot.addEventListener("pointerup", (e) => {
+        if (!dragging) return;
+        dragging = false;
+        try {
+          mascot.releasePointerCapture(e.pointerId);
+        } catch (_) {}
+        window.companion.dragEnd();
+        setMood("happy", 700);
+      });
+
+      mascot.addEventListener("dblclick", () => {
+        if (dragging) return;
+        setMood("happy", 700);
+      });
+
+      clearBtn.addEventListener("click", async () => {
+        const ok = confirm("Clear all saved Eva chat history?");
+        if (!ok) return;
+        history.length = 0;
+        await window.companion.clearChatHistory();
+        renderChat();
+        promptEl.focus();
+      });
+
+      langEl.addEventListener("change", async () => {
+        try {
+          await window.companion.savePrefs({ replyLanguage: langEl.value });
+        } catch (err) {
+          console.warn("save prefs failed", err);
+        }
+      });
+
+      async function send() {
+        const prompt = promptEl.value.trim();
+        if (!prompt) return;
+        promptEl.value = "";
+        history.push({ role: "user", content: prompt, ts: nowTs() });
+        await persist();
+        renderChat();
+
+        sendBtn.disabled = true;
+        setMood("thinking");
+        const thinking = document.createElement("div");
+        thinking.className = "msg eva muted";
+        thinking.textContent = "Eva is thinking...";
+        responseEl.appendChild(thinking);
+        responseEl.scrollTop = responseEl.scrollHeight;
+
+        try {
+          const answer = await window.companion.askChat(contextForModel());
+          history.push({ role: "assistant", content: answer, ts: nowTs() });
+          await persist();
+          renderChat();
+          setMood("happy", 700);
+        } catch (err) {
+          history.push({
+            role: "assistant",
+            content: String(err?.message || err),
+            ts: nowTs(),
+          });
+          await persist();
+          renderChat();
+          setMood(null);
+        } finally {
+          sendBtn.disabled = false;
+          promptEl.focus();
+        }
+      }
+
+      sendBtn.addEventListener("click", send);
+      promptEl.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          send();
+        }
+      });
+
+      applyBtn.addEventListener("click", async () => {
+        if (!history.length) {
+          alert("Chat with Eva first, then click Apply with Cursor.");
+          return;
+        }
+        const ok = confirm(
+          "Apply code changes with Cursor Agent using this chat?\n\nThis can edit files in the project.",
+        );
+        if (!ok) return;
+
+        applyBtn.disabled = true;
+        sendBtn.disabled = true;
+        setMood("thinking");
+        history.push({
+          role: "assistant",
+          content: "Applying with Cursor Agent…",
+          ts: nowTs(),
+        });
+        await persist();
+        renderChat();
+
+        try {
+          const result = await window.companion.applyWithCursor(history);
+          history.pop();
+          history.push({
+            role: "assistant",
+            content: "Cursor apply result:\n" + result,
+            ts: nowTs(),
+          });
+          await persist();
+          renderChat();
+          setMood("happy", 700);
+        } catch (err) {
+          history.pop();
+          history.push({
+            role: "assistant",
+            content: "Cursor apply failed:\n" + String(err?.message || err),
+            ts: nowTs(),
+          });
+          await persist();
+          renderChat();
+          setMood(null);
+        } finally {
+          applyBtn.disabled = false;
+          sendBtn.disabled = false;
+          promptEl.focus();
+        }
+      });
+
+      (async () => {
+        try {
+          const prefs = await window.companion.loadPrefs();
+          if (prefs?.replyLanguage) langEl.value = prefs.replyLanguage;
+        } catch (err) {
+          console.warn("load prefs failed", err);
+        }
+        try {
+          const loaded = await window.companion.loadChatHistory();
+          if (Array.isArray(loaded) && loaded.length) {
+            history.push(...loaded);
+          }
+        } catch (err) {
+          console.warn("load history failed", err);
+        }
+        renderChat();
+      })();
+    </script>
+  </body>
+</html>

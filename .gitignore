@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.env
+*.log
+.DS_Store
+finetune/output/
+finetune/ollama/*.gguf
+overlay/data/

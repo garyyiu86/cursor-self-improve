@@ -1,0 +1,26 @@
+{
+  "name": "cursor-self-improve",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "overlay/main.cjs",
+  "scripts": {
+    "test": "vitest run",
+    "self-improve": "tsx --env-file=.env src/self-improve.ts",
+    "typecheck": "tsc --noEmit",
+    "overlay": "electron .",
+    "companion": "electron ."
+  },
+  "dependencies": {
+    "@cursor/sdk": "^1.0.0",
+    "opencc-js": "^1.4.1",
+    "sharp": "^0.35.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "electron": "^43.2.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.9"
+  }
+}
