@@ -6,3 +6,6 @@ dist/
 finetune/output/
 finetune/ollama/*.gguf
 overlay/data/
+eva-mobile/www/
+eva-web/node_modules/
+eva-mobile/node_modules/

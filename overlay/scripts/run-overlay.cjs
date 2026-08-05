@@ -42,6 +42,9 @@ function start() {
     }
 
     console.log(`[overlay-runner] Electron exited code=${exitCode}${signal ? ` signal=${signal}` : ""}`);
+    if (exitCode !== 0) {
+      console.error("[overlay-runner] Eva exited with error — not relaunching. Fix the error and run npm run overlay again.");
+    }
     process.exit(exitCode);
   });
 

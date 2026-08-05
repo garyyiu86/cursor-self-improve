@@ -740,9 +740,18 @@
         const offProgress =
           typeof window.companion.onProgress === "function"
             ? window.companion.onProgress((info) => {
-                const msg = String(info?.message || "").trim();
-                if (!msg || info?.stage === "done") return;
-                thinking.textContent = msg;
+                const stage = String(info?.stage || "");
+                const msg = String(info?.message || "");
+                if (stage === "done") return;
+                if (stage === "stream") {
+                  thinking.classList.remove("muted");
+                  thinking.textContent = msg || "…";
+                } else {
+                  const tip = msg.trim();
+                  if (!tip) return;
+                  thinking.classList.add("muted");
+                  thinking.textContent = tip;
+                }
                 responseEl.scrollTop = responseEl.scrollHeight;
               })
             : () => {};

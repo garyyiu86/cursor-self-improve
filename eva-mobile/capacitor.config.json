@@ -1,0 +1,17 @@
+{
+  "appId": "app.eva.companion",
+  "appName": "Eva",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https",
+    "cleartext": true
+  },
+  "android": {
+    "allowMixedContent": true
+  },
+  "plugins": {
+    "Keyboard": {
+      "resize": "body"
+    }
+  }
+}

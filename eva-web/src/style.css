@@ -1,0 +1,717 @@
+:root {
+  --panel-bg: #ffffff;
+  --panel-border: #e2e8f0;
+  --text: #1f2937;
+  --muted: #64748b;
+  --soft: #94a3b8;
+  --you: #4f46e5;
+  --eva: #db2777;
+  --send: #4f46e5;
+  --apply: #0f766e;
+  --eva-font-scale: 1;
+  --eva-font-size: calc(13px * var(--eva-font-scale));
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  font: var(--eva-font-size)/1.45 "Segoe UI", sans-serif;
+  color: var(--text);
+  user-select: none;
+}
+
+body.platform-desktop {
+  width: 500px;
+  height: 420px;
+  overflow: hidden;
+  background: transparent;
+}
+
+/* Fill WebView; adjustResize + JS sets --app-height / inline height when keyboard opens */
+html.platform-android,
+body.platform-android {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+  background: #ffffff;
+  --eva-font-size: calc(16px * var(--eva-font-scale));
+  --app-height: 100%;
+}
+
+body.platform-android #app {
+  width: 100%;
+  height: var(--app-height, 100%);
+  max-height: var(--app-height, 100%);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+body.platform-android .layout {
+  flex: 1 1 auto;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+body.platform-android .panel {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  background: #ffffff;
+  padding: max(8px, env(safe-area-inset-top, 0px)) 12px 0;
+  overflow: hidden;
+}
+
+body.platform-android .response {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-height: 0;
+  background: transparent;
+}
+
+body.platform-android .chat-shell {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 14px;
+  border: 1px solid var(--panel-border);
+  background: #f8fafc;
+}
+
+body.platform-android .chat-shell .response {
+  border: 0;
+  background: transparent;
+}
+
+body.platform-android .composer {
+  position: relative;
+  flex: 0 0 auto;
+  padding-bottom: max(6px, env(safe-area-inset-bottom, 0px));
+}
+
+body.platform-android .composer .hint {
+  margin-top: 4px;
+  margin-bottom: 0;
+}
+
+body.platform-android .composer textarea {
+  min-height: 64px;
+  height: 64px;
+}
+
+.layout {
+  display: flex;
+  align-items: flex-end;
+}
+
+body.platform-desktop .layout {
+  width: 500px;
+  height: 420px;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+}
+
+body.platform-desktop .panel {
+  width: 360px;
+  height: 420px;
+  border-radius: 16px 0 0 16px;
+  border-right: 0;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+body.platform-desktop .top {
+  -webkit-app-region: drag;
+  cursor: move;
+}
+
+.top-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  -webkit-app-region: no-drag;
+}
+
+.lang,
+.settings-btn,
+.font-btn,
+.clear {
+  border: 1px solid var(--panel-border);
+  background: #f8fafc;
+  color: var(--muted);
+  border-radius: 8px;
+  padding: 3px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.font-btn {
+  font-weight: 700;
+  min-width: 2rem;
+  padding: 3px 6px;
+}
+
+.font-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.clear {
+  border: 0;
+  background: #f1f5f9;
+}
+
+h1 {
+  margin: 0;
+  font-size: 1.08em;
+  font-weight: 650;
+}
+
+.response {
+  flex: 1;
+  overflow: auto;
+  padding: 10px;
+  border-radius: 12px;
+  background: #f8fafc;
+  border: 1px solid var(--panel-border);
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #0f172a;
+  user-select: text;
+  min-height: 120px;
+  font-size: 1em;
+}
+
+.response.muted {
+  color: var(--muted);
+}
+
+.msg {
+  margin: 0 0 10px;
+}
+
+.msg .meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: baseline;
+  margin-bottom: 2px;
+}
+
+.msg .who {
+  font-size: 0.85em;
+  font-weight: 650;
+  color: var(--muted);
+}
+
+.msg .ts {
+  font-size: 0.78em;
+  color: var(--soft);
+  white-space: nowrap;
+}
+
+.msg.you .who {
+  color: var(--you);
+}
+
+.msg.eva .who {
+  color: var(--eva);
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+textarea {
+  flex: 1;
+  resize: none;
+  height: 64px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid #cbd5e1;
+  font: inherit;
+  outline: none;
+  user-select: text;
+}
+
+textarea:focus {
+  border-color: #6366f1;
+}
+
+button.send,
+button.apply {
+  width: 88px;
+  border: 0;
+  border-radius: 10px;
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 8px 6px;
+  font-size: 12px;
+}
+
+button.send {
+  background: var(--send);
+  flex: 1;
+}
+
+button.apply {
+  background: var(--apply);
+}
+
+button.send:disabled,
+button.apply:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.hint {
+  font-size: 0.85em;
+  color: var(--soft);
+}
+
+.mascot {
+  width: 140px;
+  height: 180px;
+  cursor: move;
+  flex-shrink: 0;
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.mascot-stage {
+  position: relative;
+  width: 140px;
+  height: 180px;
+}
+
+.mascot img {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 140px;
+  height: 180px;
+  object-fit: contain;
+  object-position: center bottom;
+  pointer-events: none;
+  display: block;
+  transform-origin: 50% 85%;
+  will-change: transform, opacity, filter;
+  animation: eva-idle 3.6s ease-in-out infinite;
+  opacity: 0;
+  transition: opacity 0.28s ease, filter 0.28s ease, transform 0.28s ease;
+  filter: blur(0px);
+}
+
+.mascot img.show {
+  opacity: 1;
+}
+
+.mascot.switching img.show {
+  animation: none;
+}
+
+.mascot.switching img.fade-out {
+  opacity: 0;
+  filter: blur(2px);
+  transform: scaleX(-1) scale(0.94);
+}
+
+.mascot.switching img.fade-in {
+  opacity: 1;
+  filter: blur(0);
+  transform: scaleX(-1) scale(1);
+  animation: eva-expr-pop 0.34s ease-out;
+}
+
+@keyframes eva-expr-pop {
+  0% {
+    transform: scaleX(-1) scale(0.92);
+    filter: blur(2.5px);
+    opacity: 0;
+  }
+  60% {
+    transform: scaleX(-1) scale(1.03);
+    filter: blur(0);
+    opacity: 1;
+  }
+  100% {
+    transform: scaleX(-1) scale(1);
+    opacity: 1;
+  }
+}
+
+.mascot::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 6px;
+  width: 46px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(15, 23, 42, 0.18);
+  transform: translateX(-50%);
+  filter: blur(1px);
+  pointer-events: none;
+  animation: eva-shadow 3.6s ease-in-out infinite;
+  z-index: 2;
+}
+
+.mascot.dragging img,
+.mascot.dragging::after {
+  animation: none;
+}
+
+.mascot.thinking img.show {
+  animation: eva-think 0.9s ease-in-out infinite;
+}
+
+.mascot.thinking::after {
+  animation: eva-shadow-think 0.9s ease-in-out infinite;
+}
+
+.mascot.confused img.show {
+  animation: eva-think 1.1s ease-in-out infinite;
+}
+
+.mascot.confused::after {
+  animation: eva-shadow-think 1.1s ease-in-out infinite;
+}
+
+.mascot.shy img.show {
+  animation: eva-idle 4s ease-in-out infinite;
+}
+
+.mascot.happy img.show {
+  animation: eva-happy 0.7s ease-out 1;
+}
+
+.mascot.happy::after {
+  animation: eva-shadow-happy 0.7s ease-out 1;
+}
+
+@keyframes eva-idle {
+  0%,
+  100% {
+    transform: scaleX(-1) translateY(0) rotate(-1.2deg);
+  }
+  50% {
+    transform: scaleX(-1) translateY(-7px) rotate(1.4deg);
+  }
+}
+
+@keyframes eva-shadow {
+  0%,
+  100% {
+    transform: translateX(-50%) scale(1);
+    opacity: 0.35;
+  }
+  50% {
+    transform: translateX(-50%) scale(0.82);
+    opacity: 0.2;
+  }
+}
+
+@keyframes eva-think {
+  0%,
+  100% {
+    transform: scaleX(-1) translateY(0) rotate(-2deg);
+  }
+  35% {
+    transform: scaleX(-1) translateY(-10px) rotate(2.5deg);
+  }
+  70% {
+    transform: scaleX(-1) translateY(-3px) rotate(-1deg);
+  }
+}
+
+@keyframes eva-shadow-think {
+  0%,
+  100% {
+    transform: translateX(-50%) scale(1);
+    opacity: 0.35;
+  }
+  35% {
+    transform: translateX(-50%) scale(0.72);
+    opacity: 0.16;
+  }
+  70% {
+    transform: translateX(-50%) scale(0.9);
+    opacity: 0.28;
+  }
+}
+
+@keyframes eva-happy {
+  0% {
+    transform: scaleX(-1) translateY(0) scale(1);
+  }
+  30% {
+    transform: scaleX(-1) translateY(-16px) scale(1.05);
+  }
+  55% {
+    transform: scaleX(-1) translateY(-2px) scale(0.98);
+  }
+  75% {
+    transform: scaleX(-1) translateY(-8px) scale(1.02);
+  }
+  100% {
+    transform: scaleX(-1) translateY(0) scale(1);
+  }
+}
+
+@keyframes eva-shadow-happy {
+  0%,
+  100% {
+    transform: translateX(-50%) scale(1);
+    opacity: 0.35;
+  }
+  30% {
+    transform: translateX(-50%) scale(0.65);
+    opacity: 0.14;
+  }
+  55% {
+    transform: translateX(-50%) scale(0.95);
+    opacity: 0.32;
+  }
+  75% {
+    transform: translateX(-50%) scale(0.78);
+    opacity: 0.2;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mascot img,
+  .mascot::after {
+    animation: none !important;
+    transition: none !important;
+    filter: none !important;
+  }
+}
+
+/* Connection settings overlay (Android) */
+.settings-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 50;
+}
+
+.settings-card {
+  width: min(420px, 100%);
+  background: #fff;
+  border-radius: 16px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.2);
+}
+
+.settings-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.settings-card h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.settings-close {
+  border: 0;
+  background: #f1f5f9;
+  color: #64748b;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.settings-close:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.settings-locked-hint {
+  font-size: 12px;
+  color: #b45309;
+  background: #fffbeb;
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.settings-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.settings-card label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.settings-card input {
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font: inherit;
+  color: var(--text);
+}
+
+.settings-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.settings-actions button {
+  flex: 1;
+  border: 0;
+  border-radius: 10px;
+  padding: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.settings-actions .primary {
+  background: var(--send);
+  color: #fff;
+}
+
+.settings-actions .secondary {
+  background: #f1f5f9;
+  color: var(--muted);
+}
+
+.settings-status {
+  font-size: 12px;
+  color: var(--muted);
+  min-height: 1.2em;
+}
+
+.settings-status.ok {
+  color: #059669;
+}
+
+.settings-status.err {
+  color: #dc2626;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/*
+ * Android mascot: fill chat-history with inset (WebView-safe).
+ * Avoid cqw/cqh/% height — those were collapsing to invisible.
+ */
+body.platform-android .chat-shell .mascot {
+  position: absolute !important;
+  z-index: 0 !important;
+  left: 6% !important;
+  right: 6% !important;
+  top: 10% !important;
+  bottom: 2% !important;
+  width: auto !important;
+  height: auto !important;
+  max-width: none !important;
+  max-height: none !important;
+  margin: 0 !important;
+  transform: none !important;
+  opacity: 0.42 !important;
+  pointer-events: none !important;
+  cursor: default !important;
+  display: flex !important;
+  align-items: flex-end !important;
+  justify-content: center !important;
+  visibility: visible !important;
+  flex-shrink: 0 !important;
+}
+
+body.platform-android .chat-shell .mascot-stage {
+  position: relative !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+body.platform-android .chat-shell .mascot img {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain !important;
+  object-position: center bottom !important;
+}
+
+body.platform-android .chat-shell .mascot img.show {
+  opacity: 1 !important;
+}
+
+body.platform-android .chat-shell .mascot::after {
+  display: none !important;
+}
+
+body.platform-android .chat-shell .response {
+  position: relative;
+  z-index: 1;
+  background: transparent;
+}
+

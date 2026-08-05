@@ -1,0 +1,7 @@
+{
+  "name": "eva-core",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.cjs",
+  "type": "commonjs"
+}

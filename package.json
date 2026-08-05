@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "main": "overlay/main.cjs",
+  "main": "overlay/boot.cjs",
   "scripts": {
     "test": "vitest run",
     "self-improve": "tsx --env-file=.env src/self-improve.ts",
@@ -13,7 +13,14 @@
     "overlay:once": "electron .",
     "kb:up": "docker compose up -d",
     "kb:down": "docker compose down",
-    "kb:init": "node overlay/scripts/init-kb-db.cjs"
+    "kb:init": "node overlay/scripts/init-kb-db.cjs",
+    "kb:warmup": "node overlay/scripts/kb-warmup.cjs",
+    "eva:server": "node eva-core/server.cjs",
+    "eva:web:dev": "npm --prefix eva-web run dev",
+    "eva:web:build": "npm --prefix eva-web run build",
+    "eva:mobile:sync": "npm run eva:web:build && npm --prefix eva-mobile run sync",
+    "eva:mobile:open": "npm --prefix eva-mobile run open:android",
+    "eva:verify": "node scripts/verify-eva-api.cjs"
   },
   "dependencies": {
     "@cursor/sdk": "^1.0.0",

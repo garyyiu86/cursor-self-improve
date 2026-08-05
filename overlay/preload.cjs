@@ -1,6 +1,16 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
+const connection = {
+  baseUrl: String(process.env.EVA_WEB_API_BASE || "http://127.0.0.1:8787").replace(/\/$/, ""),
+  token: String(process.env.EVA_API_TOKEN || "").trim(),
+};
+
+contextBridge.exposeInMainWorld("__EVA_PLATFORM__", "desktop");
+contextBridge.exposeInMainWorld("__EVA_CONNECTION__", connection);
+
 contextBridge.exposeInMainWorld("companion", {
+  isDesktop: true,
+  // Shared eva-web uses HTTP API; legacy overlay/app.html still uses IPC below.
   askChat: (history) => ipcRenderer.invoke("ask-chat", history),
   applyWithCursor: (history) => ipcRenderer.invoke("apply-with-cursor", history),
   askCopilot: (prompt) => ipcRenderer.invoke("ask-copilot", prompt),

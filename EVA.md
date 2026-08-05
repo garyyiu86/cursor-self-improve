@@ -1,0 +1,136 @@
+# Eva — PC BE + shared FE (Electron / Android)
+
+Shared architecture:
+
+- **`eva-core`** — ask pipeline + HTTP/SSE API on `:8787`
+- **`eva-web`** — Vite chat UI (PC + Android)
+- **`overlay/`** — Electron shell (mascot, tray, drag, Apply with Cursor)
+- **`eva-mobile/`** — Capacitor Android APK
+
+```
+Electron / Android APK
+        │  HTTP + SSE (+ Bearer token)
+        ▼
+   eva-core :8787  →  Ollama (127.0.0.1) / Postgres KB / Tavily
+```
+
+## Quick start (PC)
+
+1. Copy `.env.example` → `.env` and set keys. **Set a stable token:**
+
+```env
+EVA_API_TOKEN=change-me-local-token
+EVA_API_PORT=8787
+EVA_API_HOST=0.0.0.0
+```
+
+2. Start KB (optional) and build the web UI:
+
+```bash
+npm run kb:up
+npm run kb:init
+npm run eva:web:build
+```
+
+3. Run the desktop companion (embeds API + loads `eva-web/dist`):
+
+```bash
+npm run overlay
+```
+
+Or run API alone (phone / headless):
+
+```bash
+npm run eva:server
+```
+
+Dev hot-reload for UI:
+
+```bash
+npm run eva:web:dev
+# other terminal:
+# set EVA_WEB_URL=http://127.0.0.1:5173 && npm run overlay
+```
+
+## Android APK (local install)
+
+### Prerequisites
+
+- Android Studio (SDK + platform tools)
+- JDK 17+
+- Phone and PC on the **same Wi‑Fi**
+- Windows Firewall: allow inbound **TCP 8787** (Private networks)
+
+Find your PC LAN IP (PowerShell):
+
+```powershell
+Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -notlike '127.*' }
+```
+
+### Build & install
+
+```bash
+npm run eva:web:build
+npm run eva:mobile:sync
+npm run eva:mobile:open
+```
+
+In Android Studio:
+
+1. Connect the phone (USB debugging on) or pick an emulator
+2. **Run** ▸ app, or **Build** ▸ Build Bundle(s) / APK(s) ▸ Build APK(s)
+3. Install the APK (USB or copy `android/app/build/outputs/apk/...`)
+
+Cleartext HTTP to the PC is enabled via `android:usesCleartextTraffic` + `network_security_config.xml` (LAN-only; not for Play Store).
+
+### First launch (in-app settings)
+
+1. Open **設定**
+2. Base URL: `http://<PC-LAN-IP>:8787`
+3. Token: same as `EVA_API_TOKEN` in `.env`
+4. Tap **測試連線** → should show `OK`
+5. **儲存** → chat + history sync with the PC
+
+## API (Bearer)
+
+All routes require `Authorization: Bearer <EVA_API_TOKEN>`.
+
+| Method | Path | Notes |
+|--------|------|--------|
+| GET | `/api/health` | `{ ok, kb }` |
+| POST | `/api/chat` | body `{ messages }`, SSE stages: kb/search/think/stream → `answer` → `done` |
+| GET/PUT/DELETE | `/api/history` | shared server-side history |
+| GET/PATCH | `/api/prefs` | e.g. `{ replyLanguage }` |
+
+Example health check:
+
+```powershell
+$token = "change-me-local-token"
+Invoke-RestMethod -Headers @{ Authorization = "Bearer $token" } http://127.0.0.1:8787/api/health
+```
+
+## Verify chat / history / stream
+
+1. Start `npm run eva:server` (or `npm run overlay`)
+2. PC: open Eva overlay → send a message → watch streamed progress, then final reply
+3. Phone: same Wi‑Fi + settings → send another message
+4. Confirm **history** matches on both (Clear on one clears the shared server file under `overlay/data/chat-history.json`)
+5. Confirm SSE progress tips appear while thinking/streaming
+
+## Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `npm run eva:server` | HTTP API only |
+| `npm run eva:web:build` | Build shared UI → `eva-web/dist` |
+| `npm run eva:web:dev` | Vite dev server |
+| `npm run overlay` | Electron + embedded API + eva-web |
+| `npm run eva:mobile:sync` | Build web + Capacitor sync |
+| `npm run eva:mobile:open` | Open Android Studio project |
+
+## Out of scope (this phase)
+
+- Browser / PWA as the primary mobile UX
+- Cloud-hosted BE / on-phone Ollama
+- Apply-with-Cursor on Android
+- Play Store release
