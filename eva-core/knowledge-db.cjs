@@ -262,6 +262,51 @@ async function countKnowledgeEntries() {
   return Number(rows[0]?.n || 0);
 }
 
+/**
+ * List KB rows for export / training (newest first).
+ * @param {{ limit?: number, offset?: number, minAnswerLen?: number, selfDrillOnly?: boolean }} opts
+ */
+async function listKnowledgeEntries(opts = {}) {
+  await initKnowledgeDb();
+  const p = getPool();
+  if (!p || !ready) return [];
+
+  const limit = Math.max(1, Math.min(50_000, Number(opts.limit || 10_000)));
+  const offset = Math.max(0, Number(opts.offset || 0));
+  const minAnswerLen = Math.max(0, Number(opts.minAnswerLen || 0));
+  const selfDrillOnly = Boolean(opts.selfDrillOnly);
+
+  const where = [];
+  const params = [];
+  if (selfDrillOnly) {
+    params.push("%[self-drill/%");
+    where.push(`notes ILIKE $${params.length}`);
+  }
+  if (minAnswerLen > 0) {
+    params.push(minAnswerLen);
+    where.push(
+      `(char_length(COALESCE(NULLIF(answer, ''), notes)) >= $${params.length})`,
+    );
+  }
+  const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
+  params.push(limit);
+  const limIdx = params.length;
+  params.push(offset);
+  const offIdx = params.length;
+
+  const { rows } = await p.query(
+    `
+    SELECT *
+    FROM knowledge_entries
+    ${whereSql}
+    ORDER BY updated_at DESC
+    LIMIT $${limIdx} OFFSET $${offIdx}
+    `,
+    params,
+  );
+  return rows.map(mapRow);
+}
+
 async function closeKnowledgeDb() {
   if (pool) {
     await pool.end();
@@ -277,6 +322,7 @@ module.exports = {
   searchKnowledgeBase,
   addKnowledgeEntry,
   countKnowledgeEntries,
+  listKnowledgeEntries,
   closeKnowledgeDb,
   tokenizeForKb,
   databaseUrl,

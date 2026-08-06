@@ -1,0 +1,11 @@
+# Eva LoRA — replace FROM with your merged/quantized GGUF or base tag.
+# Example after convert:
+#   FROM ./out/eva-lora-q4_k_m.gguf
+# Or start from an existing Ollama model and document the adapter workflow you use:
+FROM llama3.1:8b
+
+PARAMETER temperature 0.6
+PARAMETER top_p 0.9
+PARAMETER num_ctx 4096
+
+SYSTEM """你是 Eva，桌面／手機伴侶助手。用自然、口語化的繁體中文回答。回答要準確、簡潔；不確定時說明不確定。事實優先依據知識庫與搜尋結果。"""

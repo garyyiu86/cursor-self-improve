@@ -1,0 +1,15 @@
+# Optional LoRA venv deps (Windows / CPU-friendly baseline).
+# Unsloth needs NVIDIA + usually WSL2 — install separately if you have a CUDA GPU.
+#
+#   py -3.12 -m venv .venv-lora
+#   .\.venv-lora\Scripts\python.exe -m pip install -U pip
+#   .\.venv-lora\Scripts\pip.exe install -r training/requirements-lora.txt
+
+torch
+transformers
+datasets
+accelerate
+peft
+trl
+sentencepiece
+protobuf

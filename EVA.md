@@ -44,6 +44,39 @@ Or run API alone (phone / headless):
 npm run eva:server
 ```
 
+### 常識自問自答（擴 KB，唔 fine-tune）
+
+Postgres + `TAVILY_API_KEY` 要就緒。Eva 會由種子題／主題 **自問**，用 Tavily **查證後寫入 KB**：
+
+```bash
+npm run kb:up
+npm run kb:init
+npm run eva:self-drill
+# 無限循環（每輪 LLM 出新題，Ctrl+C 停）:
+# npm run eva:self-drill -- --infinite
+# 一次過唔截斷 / 少啲題:
+# npm run eva:self-drill -- --limit 0
+# npm run eva:self-drill -- --limit 5 --no-llm
+```
+
+題庫：`overlay/data/self-drill-common-sense.txt`（`Q:` = 現成問題；其他行 = 主題畀 LLM 擴）。
+
+### KB + LoRA（兩層同時）
+
+1. 充 KB：`npm run eva:self-drill -- --infinite`
+2. 匯出訓練集：`npm run eva:export-train` → `training/data/*.jsonl`
+3. 另開 Python venv 做 LoRA（見 [`training/README.md`](training/README.md)）
+4. `ollama create` 後設 `OLLAMA_MODEL=eva-lora`，**保持** `EVA_USE_KB=1`
+
+每日 06:00 自動 export（可選 LoRA）：
+
+```bash
+npm run eva:schedule-train
+# 試跑：npm run eva:daily-train
+```
+
+詳見 [`training/README.md`](training/README.md) §5。
+
 Dev hot-reload for UI:
 
 ```bash
@@ -170,6 +203,14 @@ Invoke-RestMethod -Headers @{ Authorization = "Bearer $token" } http://127.0.0.1
 | `npm run eva:mobile:sync` | Build web + Capacitor sync |
 | `npm run eva:mobile:open` | Open Android Studio project |
 | `npm run eva:tunnel` | Cloudflare quick tunnel → local `:8787` |
+| `npm run eva:self-drill` | 常識自問 → Tavily 查證 → 寫入 KB |
+| `npm run eva:export-train` | 匯出 JSONL（`--mode personal` 偏人設） |
+| `npm run eva:train-lora` | peft LoRA 訓練 |
+| `npm run eva:merge-lora` | Merge LoRA → GGUF → ollama create |
+| `npm run eva:backup-kb` | Dump KB → `backups/kb/` + commit + push |
+| `npm run eva:schedule-kb-backup` | 註冊／取消每日 **16:00** KB backup 排程 |
+| `npm run eva:daily-train` | 每日腳本：export（+ 可選 LoRA） |
+| `npm run eva:schedule-train` | 註冊／取消 Windows 06:00 排程 |
 
 ## Out of scope (this phase)
 
