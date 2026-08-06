@@ -24,4 +24,7 @@ In Android Studio: Run on device, or Build → Build APK(s).
 
 First launch → **設定**: PC base URL + `EVA_API_TOKEN`, then **測試連線**.
 
+- Same Wi‑Fi: `http://<PC-LAN-IP>:8787`
+- Away from home: start `npm run eva:tunnel` on the PC, then use the `https://….trycloudflare.com` URL (see [EVA.md](../EVA.md)).
+
 Full guide: [EVA.md](../EVA.md).

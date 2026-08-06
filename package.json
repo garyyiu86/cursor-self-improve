@@ -20,7 +20,8 @@
     "eva:web:build": "npm --prefix eva-web run build",
     "eva:mobile:sync": "npm run eva:web:build && npm --prefix eva-mobile run sync",
     "eva:mobile:open": "npm --prefix eva-mobile run open:android",
-    "eva:verify": "node scripts/verify-eva-api.cjs"
+    "eva:verify": "node scripts/verify-eva-api.cjs",
+    "eva:tunnel": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/eva-tunnel.ps1"
   },
   "dependencies": {
     "@cursor/sdk": "^1.0.0",

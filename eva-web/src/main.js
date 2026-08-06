@@ -160,11 +160,11 @@ app.innerHTML =
         <h2>連線設定</h2>
         <button type="button" class="settings-close" id="connClose" title="關閉" aria-label="關閉">×</button>
       </div>
-      <p>輸入 PC 嘅 LAN IP、埠同 API token（同 .env 嘅 EVA_API_TOKEN）。</p>
+      <p>輸入 PC 位址（LAN 或 Cloudflare Tunnel HTTPS）同 API token（同 .env 嘅 EVA_API_TOKEN）。</p>
       <div id="settingsLockedHint" class="settings-locked-hint hidden">
         傾偈進行中，唔可以改連線設定。請等 Eva 答完再改。
       </div>
-      <label>PC 位址（例如 http://192.168.1.10:8787）
+      <label>PC 位址（例如 http://192.168.1.10:8787 或 https://xxxx.trycloudflare.com）
         <input id="connBase" type="url" autocomplete="off" spellcheck="false" />
       </label>
       <label>API Token
@@ -205,11 +205,11 @@ app.innerHTML =
         <h2>連線設定</h2>
         <button type="button" class="settings-close" id="connClose" title="關閉" aria-label="關閉">×</button>
       </div>
-      <p>輸入 PC 嘅 LAN IP、埠同 API token（同 .env 嘅 EVA_API_TOKEN）。</p>
+      <p>輸入 PC 位址（LAN 或 Cloudflare Tunnel HTTPS）同 API token（同 .env 嘅 EVA_API_TOKEN）。</p>
       <div id="settingsLockedHint" class="settings-locked-hint hidden">
         傾偈進行中，唔可以改連線設定。請等 Eva 答完再改。
       </div>
-      <label>PC 位址（例如 http://192.168.1.10:8787）
+      <label>PC 位址（例如 http://192.168.1.10:8787 或 https://xxxx.trycloudflare.com）
         <input id="connBase" type="url" autocomplete="off" spellcheck="false" />
       </label>
       <label>API Token

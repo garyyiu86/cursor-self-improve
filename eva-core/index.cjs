@@ -1,3 +1,4 @@
+require("./log.cjs");
 const knowledgeDb = require("./knowledge-db.cjs");
 const { loadEnvFile, setDataDir, getDataDir } = require("./env.cjs");
 const { askChat } = require("./ask.cjs");

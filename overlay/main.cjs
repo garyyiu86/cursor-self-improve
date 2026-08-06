@@ -1,3 +1,4 @@
+require("../eva-core/log.cjs");
 const { app, BrowserWindow, screen, Menu, Tray, nativeImage, ipcMain } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");

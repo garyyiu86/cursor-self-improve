@@ -91,6 +91,48 @@ Cleartext HTTP to the PC is enabled via `android:usesCleartextTraffic` + `networ
 4. Tap **測試連線** → should show `OK`
 5. **儲存** → chat + history sync with the PC
 
+## Cloudflare Tunnel (public HTTPS → your PC)
+
+Use this when the phone is **not** on the same Wi‑Fi (or you want HTTPS). The API still runs on your PC; Cloudflare only forwards traffic. Ollama / Postgres stay local.
+
+### One-time install
+
+```powershell
+winget install --id Cloudflare.cloudflared -e
+```
+
+Reopen the terminal after install so `cloudflared` is on `PATH`.
+
+### Run
+
+1. Start the API (keep it running):
+
+```bash
+npm run eva:server
+# or: npm run overlay
+```
+
+2. In another terminal:
+
+```bash
+npm run eva:tunnel
+```
+
+3. Copy the printed URL, e.g. `https://xxxx.trycloudflare.com` (no trailing path).
+
+4. On the phone → **設定**:
+   - PC 位址: that `https://….trycloudflare.com` URL
+   - Token: same as `EVA_API_TOKEN` in `.env`
+   - **測試連線** → OK → **儲存**
+
+Quick tunnels give a **new URL each time** you restart `eva:tunnel`. Keep the tunnel window open while chatting.
+
+### Security
+
+- Use a strong, stable `EVA_API_TOKEN` (anyone with the URL + token can call your API).
+- Stop the tunnel when you are done.
+- For a fixed hostname, create a named tunnel in the Cloudflare Zero Trust dashboard (optional; needs a Cloudflare account + domain).
+
 ## API (Bearer)
 
 All routes require `Authorization: Bearer <EVA_API_TOKEN>`.
@@ -127,6 +169,7 @@ Invoke-RestMethod -Headers @{ Authorization = "Bearer $token" } http://127.0.0.1
 | `npm run overlay` | Electron + embedded API + eva-web |
 | `npm run eva:mobile:sync` | Build web + Capacitor sync |
 | `npm run eva:mobile:open` | Open Android Studio project |
+| `npm run eva:tunnel` | Cloudflare quick tunnel → local `:8787` |
 
 ## Out of scope (this phase)
 
