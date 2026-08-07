@@ -463,7 +463,8 @@ function contextForModel() {
     .slice(-MAX_CONTEXT_TURNS);
 }
 
-function renderChat() {
+function renderChat({ scrollToBottom = false, preserveScroll = false } = {}) {
+  const prevTop = responseEl.scrollTop;
   if (!history.length) {
     responseEl.classList.add("muted");
     responseEl.textContent = feat.platform === "android"
@@ -492,7 +493,11 @@ function renderChat() {
     div.appendChild(body);
     responseEl.appendChild(div);
   }
-  responseEl.scrollTop = responseEl.scrollHeight;
+  if (scrollToBottom) {
+    responseEl.scrollTop = responseEl.scrollHeight;
+  } else if (preserveScroll) {
+    responseEl.scrollTop = prevTop;
+  }
 }
 
 function openSettings(force = false) {
@@ -587,14 +592,14 @@ connSave?.addEventListener("click", async () => {
  * Server file is source of truth for PC ↔ phone sync.
  * Skip while chatBusy so we don't wipe the streaming turn.
  */
-async function pullHistoryFromServer() {
+async function pullHistoryFromServer({ scrollToBottom = false } = {}) {
   if (chatBusy) return false;
   try {
     const loaded = await api.loadChatHistory();
     if (!Array.isArray(loaded)) return false;
     history.length = 0;
     history.push(...loaded);
-    renderChat();
+    renderChat(scrollToBottom ? { scrollToBottom: true } : { preserveScroll: true });
     return true;
   } catch (err) {
     console.warn("pull history failed", err);
@@ -672,7 +677,7 @@ async function send() {
 
   history.push({ role: "user", content: prompt, ts: nowTs() });
   await persist();
-  renderChat();
+  renderChat({ scrollToBottom: true });
 
   chatBusy = true;
   setSettingsLocked(true);
@@ -705,7 +710,7 @@ async function send() {
     });
     history.push({ role: "assistant", content: answer, ts: nowTs() });
     await persist();
-    renderChat();
+    renderChat({ scrollToBottom: true });
     setMood("happy", 1200);
   } catch (err) {
     history.push({
@@ -714,7 +719,7 @@ async function send() {
       ts: nowTs(),
     });
     await persist();
-    renderChat();
+    renderChat({ scrollToBottom: true });
     setMood("confused", 1800);
   } finally {
     chatBusy = false;
@@ -755,7 +760,7 @@ applyBtn?.addEventListener("click", async () => {
     ts: nowTs(),
   });
   await persist();
-  renderChat();
+  renderChat({ scrollToBottom: true });
 
   try {
     const result = await window.companion.applyWithCursor(history);
@@ -766,7 +771,7 @@ applyBtn?.addEventListener("click", async () => {
       ts: nowTs(),
     });
     await persist();
-    renderChat();
+    renderChat({ scrollToBottom: true });
     setMood("happy", 1200);
   } catch (err) {
     history.pop();
@@ -776,7 +781,7 @@ applyBtn?.addEventListener("click", async () => {
       ts: nowTs(),
     });
     await persist();
-    renderChat();
+    renderChat({ scrollToBottom: true });
     setMood("confused", 1800);
   } finally {
     chatBusy = false;
@@ -794,7 +799,7 @@ async function bootstrapChat() {
   } catch (err) {
     console.warn("load prefs failed", err);
   }
-  await pullHistoryFromServer();
+  await pullHistoryFromServer({ scrollToBottom: true });
 }
 
 (async () => {
