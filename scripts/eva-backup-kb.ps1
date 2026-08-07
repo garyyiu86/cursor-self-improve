@@ -1,17 +1,32 @@
 # Backup Eva Postgres KB into repo and push to remote.
-# Intended for Windows Task Scheduler at 16:00.
+# Retries automatically until success (no interactive RETRY prompts).
 #
 #   npm run eva:backup-kb
 #   npm run eva:schedule-kb-backup
+#
+# Env:
+#   EVA_KB_BACKUP_RETRIES=12          - max attempts (default 12)
+#   EVA_KB_BACKUP_RETRY_SEC=30        - seconds between attempts
+#   EVA_KB_BACKUP_PUSH=0              - skip git push
+#   EVA_KB_BACKUP_COMMIT=0            - skip git commit
 
 $ErrorActionPreference = "Stop"
 $RepoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 Set-Location $RepoRoot
 
+# Never prompt for credentials / confirmations in scheduled runs
+$env:GIT_TERMINAL_PROMPT = "0"
+$env:GCM_INTERACTIVE = "never"
+
 $LogDir = Join-Path $RepoRoot "backups\kb\logs"
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $LogFile = Join-Path $LogDir "kb-backup-$stamp.log"
+
+$maxAttempts = [int]($(if ($env:EVA_KB_BACKUP_RETRIES) { $env:EVA_KB_BACKUP_RETRIES } else { 12 }))
+$retrySec = [int]($(if ($env:EVA_KB_BACKUP_RETRY_SEC) { $env:EVA_KB_BACKUP_RETRY_SEC } else { 30 }))
+if ($maxAttempts -lt 1) { $maxAttempts = 1 }
+if ($retrySec -lt 5) { $retrySec = 5 }
 
 function Write-Log([string]$msg) {
   $line = "[{0}] {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $msg
@@ -38,19 +53,22 @@ function Load-DotEnv {
   }
 }
 
-try {
+function Invoke-BackupOnce {
   Load-DotEnv
-  Write-Log "=== Eva KB backup start ==="
+  # Re-apply non-interactive after dotenv
+  $env:GIT_TERMINAL_PROMPT = "0"
+  $env:GCM_INTERACTIVE = "never"
+
+  Write-Log "=== Eva KB backup attempt ==="
 
   $kbUp = if ($env:EVA_KB_BACKUP_KB_UP) { $env:EVA_KB_BACKUP_KB_UP } else { "1" }
   if ($kbUp -ne "0") {
     Write-Log "docker compose up -d..."
-    try {
-      & docker compose up -d 2>&1 | ForEach-Object { Write-Log "  $_" }
-      Start-Sleep -Seconds 2
-    } catch {
-      Write-Log "WARN: docker compose: $($_.Exception.Message)"
-    }
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    & docker compose up -d 2>&1 | ForEach-Object { Write-Log "  $_" }
+    $ErrorActionPreference = $prevEap
+    Start-Sleep -Seconds 3
   }
 
   Write-Log "export KB..."
@@ -71,14 +89,12 @@ try {
   $porcelain = & git status --porcelain -- "backups/kb"
   if (-not $porcelain) {
     Write-Log "No KB file changes; skip commit/push"
-    Write-Log "=== Eva KB backup done (unchanged) ==="
-    exit 0
+    return "unchanged"
   }
 
   if ($skipCommit) {
     Write-Log "Commit skipped (EVA_KB_BACKUP_COMMIT=0)"
-    Write-Log "=== Eva KB backup done (files only) ==="
-    exit 0
+    return "files-only"
   }
 
   $count = "?"
@@ -94,18 +110,38 @@ try {
 
   if ($skipPush) {
     Write-Log "Push skipped (EVA_KB_BACKUP_PUSH=0)"
-  } else {
-    Write-Log "git push..."
-    & git push
-    if ($LASTEXITCODE -ne 0) { throw "git push failed" }
-    Write-Log "Pushed OK"
+    return "committed"
   }
 
-  Write-Log "=== Eva KB backup done ==="
-  exit 0
+  Write-Log "git push..."
+  $prevEap = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  & git push 2>&1 | ForEach-Object { Write-Log "  $_" }
+  $pushCode = $LASTEXITCODE
+  $ErrorActionPreference = $prevEap
+  if ($pushCode -ne 0) { throw "git push failed exit=$pushCode" }
+  Write-Log "Pushed OK"
+  return "pushed"
 }
-catch {
-  Write-Log "ERROR: $($_.Exception.Message)"
-  Write-Log "=== Eva KB backup FAILED ==="
-  exit 1
+
+Write-Log "=== Eva KB backup start (maxAttempts=$maxAttempts retrySec=$retrySec) ==="
+
+$lastErr = $null
+for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+  try {
+    Write-Log "--- attempt $attempt / $maxAttempts ---"
+    $result = Invoke-BackupOnce
+    Write-Log "=== Eva KB backup done ($result) ==="
+    exit 0
+  } catch {
+    $lastErr = $_.Exception.Message
+    Write-Log "ERROR attempt $attempt : $lastErr"
+    if ($attempt -ge $maxAttempts) { break }
+    Write-Log "Auto-retry in ${retrySec}s (no prompt)..."
+    Start-Sleep -Seconds $retrySec
+  }
 }
+
+Write-Log "ERROR: gave up after $maxAttempts attempts: $lastErr"
+Write-Log "=== Eva KB backup FAILED ==="
+exit 1
