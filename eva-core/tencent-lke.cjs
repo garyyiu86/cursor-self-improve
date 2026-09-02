@@ -17,6 +17,11 @@ function sessionPath(sessionName) {
   return path.join(getDataDir(), sessionFileName(sessionName));
 }
 
+function isEphemeralSession(sessionName) {
+  const name = String(sessionName || "").trim();
+  return name === "tencent-lke-drill" || /-drill$/i.test(name);
+}
+
 function newConversationId() {
   return crypto.randomUUID();
 }
@@ -108,6 +113,9 @@ function loadTencentSession(sessionName) {
       ? process.env.TENCENT_LKE_CONVERSATION_ID || ""
       : process.env.TENCENT_LKE_DRILL_CONVERSATION_ID || "",
   ).trim();
+  if (isEphemeralSession(sessionName)) {
+    return { conversationId: envConv || newConversationId() };
+  }
   try {
     const p = sessionPath(sessionName);
     const raw = fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, "utf8")) : {};
@@ -120,6 +128,7 @@ function loadTencentSession(sessionName) {
 }
 
 function saveTencentSession(session, sessionName) {
+  if (isEphemeralSession(sessionName)) return session;
   const dir = getDataDir();
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(
