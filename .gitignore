@@ -17,3 +17,4 @@ backups/kb/logs/
 eva-mobile/www/
 eva-web/node_modules/
 eva-mobile/node_modules/
+overlay/data/tencent-lke-drill.json
