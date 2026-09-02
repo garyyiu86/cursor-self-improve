@@ -11,6 +11,12 @@ const { loadPrefs, savePrefs } = require("./prefs.cjs");
 const { resolveHistoryForModel } = require("./history.cjs");
 const { tavilySearch } = require("./tavily.cjs");
 const { formatFetchError, getLlmConfig, getLlmFallbackChain, llmChatOnce } = require("./llm.cjs");
+const { tencentLkeConfigured, tencentLkeChat } = require("./tencent-lke.cjs");
+const {
+  normalizeAttachments,
+  extractTextPrefix,
+  uploadHint,
+} = require("./tencent-lke-files.cjs");
 const {
   gatherKnowledgeForOllama,
   rememberAnswerInKb,
@@ -105,7 +111,21 @@ function buildSystemPrompt(lang, nowFact, knowledgeNotes, { includeClock = false
   return parts.filter((p) => p !== "").join("\n");
 }
 
-async function askOllama(historyMessages, { onProgress } = {}) {
+function mergeFileText(userText, attachments) {
+  const { textPrefix, leftover } = extractTextPrefix(attachments || [], {
+    maxChars: Number(process.env.EVA_FILE_MAX_CHARS || 16000),
+  });
+  if (leftover.length) {
+    const names = leftover.map((f) => f.name).join("、");
+    throw new Error(
+      `Eva 模式未能讀「${names}」。文字檔可直接問；${uploadHint()} 然後切去騰訊雲模式。`,
+    );
+  }
+  const text = String(userText || "").trim() || "你好";
+  return textPrefix ? `${textPrefix}\n\n${text}` : text;
+}
+
+async function askOllama(historyMessages, { onProgress, attachments } = {}) {
   const tAll = nowMs();
   const progress = (stage, message) => {
     try {
@@ -120,17 +140,21 @@ async function askOllama(historyMessages, { onProgress } = {}) {
 
   const history = resolveHistoryForModel(historyMessages);
   const lastUser = [...history].reverse().find((m) => m.role === "user");
-  const rawUser = String(lastUser?.content ?? "").trim() || "你好";
+  const files = Array.isArray(attachments) ? attachments : [];
+  const rawUser = mergeFileText(
+    String(lastUser?.content ?? "").trim() || "你好",
+    files,
+  );
   console.log(
-    `[Eva][timing] ask start provider=${llm.provider} model=${model} q="${rawUser.slice(0, 80)}"`,
+    `[Eva][timing] ask start provider=${llm.provider} model=${model} q="${rawUser.slice(0, 80)}" files=${files.length}`,
   );
 
-  if (isDateTimeQuestion(rawUser)) {
+  if (!files.length && isDateTimeQuestion(rawUser)) {
     progress("done", "已取得日期時間");
     logTiming("ask total (datetime local)", tAll);
     return applyLanguageScript(answerDateTimeLocally(lang), lang);
   }
-  if (isPersonaChangeRequest(rawUser)) {
+  if (!files.length && isPersonaChangeRequest(rawUser)) {
     try {
       return applyLanguageScript(
         await updatePersonaFromUserRequest(rawUser, lang),
@@ -564,21 +588,177 @@ async function askOllama(historyMessages, { onProgress } = {}) {
   return applyLanguageScript(text, lang);
 }
 
-async function askChatInner(historyMessages, { onProgress } = {}) {
+function decideWantFacts(rawUser, history) {
+  const followUp = isContextualFollowUp(rawUser);
+  const pureFollowUp = isPureAnaphoraFollowUp(rawUser);
+  let binaryChoice = extractBinaryChoice(rawUser);
+  let wantFacts = false;
+  if (!binaryChoice) {
+    if (isOpinionOrPreferenceQuestion(rawUser) || NON_FACT_OPINION_RE.test(rawUser)) {
+      wantFacts = false;
+    } else if (pureFollowUp) {
+      wantFacts = priorTurnWantedFacts(history);
+    } else {
+      wantFacts = isFactualQuestion(rawUser);
+    }
+  }
+  return { wantFacts, followUp, pureFollowUp, binaryChoice };
+}
+
+function clipKnowledgeNotes(notes) {
+  const s = String(notes || "").trim();
+  const max = Number(process.env.TENCENT_LKE_KB_MAX_CHARS || 4000);
+  if (!s) return "";
+  if (!Number.isFinite(max) || max <= 0 || s.length <= max) return s;
+  return `${s.slice(0, max)}\n…(truncated)`;
+}
+
+function buildEvaSystemRole(lang, { knowledgeNotes = "", knowledgeSource = "", factLookupAttempted = false } = {}) {
+  const parts = [
+    loadPersona(),
+    "",
+    "VOICE FIRST:",
+    "- Reply as Eva the companion. Sound spoken and personal.",
+    "- Put a tiny emotional beat first, then the useful answer.",
+    "- Forbidden canned openings: AI disclaimers,「根據資料」「簡單來說」「總結」「以下是」, helpdesk tone.",
+    "- Do not mention Tencent Cloud, ADP, or that you are a different agent.",
+    "",
+    languageInstruction(lang),
+  ];
+  const notes = clipKnowledgeNotes(knowledgeNotes);
+  if (notes) {
+    parts.push(
+      "",
+      "PIPELINE: Materials below were already fetched from Eva's local knowledge base (and/or Tavily).",
+      knowledgeSource ? `Knowledge source: ${knowledgeSource}.` : "",
+      "Use ONLY these materials for facts. Paraphrase in Eva's voice; do not dump them raw.",
+      "If materials are insufficient, say what is missing instead of guessing.",
+      "Materials:\n" + notes,
+    );
+  } else if (factLookupAttempted) {
+    parts.push(
+      "",
+      "PIPELINE: Eva's local KB and Tavily returned no usable materials.",
+      "Answer the user question directly. If unsure, say so honestly. Do not claim you searched.",
+    );
+  }
+  return parts.filter((p) => p !== "").join("\n");
+}
+
+async function askTencent(historyMessages, { onProgress, attachments } = {}) {
+  const tAll = nowMs();
+  const history = resolveHistoryForModel(historyMessages);
+  const lastUser = [...history].reverse().find((m) => m.role === "user");
+  const files = Array.isArray(attachments) ? attachments : [];
+  const rawUser = String(lastUser?.content ?? "").trim() || "你好";
+  const lang = loadPrefs().replyLanguage || "zh-Hant";
+  console.log(
+    `[Eva][timing] ask start provider=tencent q="${rawUser.slice(0, 80)}" files=${files.length}`,
+  );
+
+  if (!files.length && isPersonaChangeRequest(rawUser)) {
+    try {
+      return applyLanguageScript(
+        await updatePersonaFromUserRequest(rawUser, lang),
+        lang,
+      );
+    } catch (err) {
+      console.warn("[Eva] Persona update failed:", err?.message || err);
+      if (lang === "en") return "I tried to update my persona but failed. Try again later.";
+      return "我想更新人設但失敗了，請稍後再試一次。";
+    }
+  }
+
+  try {
+    onProgress?.({ stage: "think", message: "騰訊雲 ADP 對答中…" });
+  } catch (_) {}
+
+  const { wantFacts, followUp } = files.length
+    ? { wantFacts: false, followUp: false }
+    : decideWantFacts(rawUser, history);
+  let knowledgeNotes = "";
+  let knowledgeSource = "";
+  if (wantFacts) {
+    const kbQuery = knowledgeLookupQuery(rawUser, history);
+    console.log(
+      `[Eva][pipeline] ①KB → ②Tavily → ③ADP | followUp=${followUp} q="${kbQuery.slice(0, 60)}"`,
+    );
+    const kb = await gatherKnowledgeForOllama(kbQuery, {
+      allowSearch: true,
+      onProgress,
+    });
+    knowledgeNotes = String(kb.notes || "").trim();
+    knowledgeSource = kb.source || "none";
+    if (!knowledgeNotes) {
+      console.log("[Eva][pipeline] KB+Tavily empty → ③ ADP with question only");
+    } else {
+      console.log(
+        `[Eva][pipeline] materials ready source=${knowledgeSource} chars=${knowledgeNotes.length} → ③ ADP`,
+      );
+    }
+  } else {
+    console.log("[Eva][pipeline] skip KB/Tavily (non-fact) → ADP chat");
+  }
+
+  const systemRole = buildEvaSystemRole(lang, {
+    knowledgeNotes,
+    knowledgeSource,
+    factLookupAttempted: wantFacts,
+  });
+  console.log(
+    `[Eva] Tencent SystemRole chars=${systemRole.length} kb=${knowledgeSource || "none"}`,
+  );
+  const text = await tencentLkeChat(rawUser, {
+    onProgress,
+    systemRole,
+    attachments: files,
+  });
+
+  if (wantFacts && !knowledgeNotes) {
+    await rememberAnswerInKb(rawUser, text);
+  }
+  if (wantFacts) {
+    scheduleKbAutoWarmupFromChat(knowledgeLookupQuery(rawUser, history));
+  }
+
+  try {
+    onProgress?.({ stage: "done", message: "完成" });
+  } catch (_) {}
+  logTiming(
+    "ask total (tencent)",
+    tAll,
+    `chars=${text.length} factQ=${wantFacts} kb=${knowledgeSource || "none"}`,
+  );
+  return text;
+}
+
+async function askChatInner(historyMessages, { onProgress, attachments } = {}) {
   const history = Array.isArray(historyMessages) ? historyMessages : [];
   const lastUser = [...history].reverse().find((m) => m.role === "user");
   const prompt = lastUser ? String(lastUser.content ?? "") : "";
+  const files = normalizeAttachments(attachments);
 
-  const currentLang = loadPrefs().replyLanguage || "zh-Hant";
+  const prefs = loadPrefs();
+  const currentLang = prefs.replyLanguage || "zh-Hant";
   if (currentLang === "auto") {
     const detected = detectLanguagePreference(prompt);
     if (detected) savePrefs({ replyLanguage: detected });
   }
 
+  if (prefs.chatMode === "tencent") {
+    if (!tencentLkeConfigured()) {
+      throw new Error(
+        "騰訊雲模式未設定 AppKey。請在 .env 填 TENCENT_LKE_APP_KEY 後重啟 Eva。",
+      );
+    }
+    return await askTencent(history, { onProgress, attachments: files });
+  }
+
   try {
-    return await askOllama(history, { onProgress });
+    return await askOllama(history, { onProgress, attachments: files });
   } catch (ollamaErr) {
     console.warn("LLM unavailable, falling back:", formatFetchError(ollamaErr));
+    if (files.length) throw ollamaErr;
   }
 
   if (!process.env.TAVILY_API_KEY) {
@@ -622,15 +802,17 @@ async function askChatInner(historyMessages, { onProgress } = {}) {
   }
 }
 
-async function askChat(historyMessages, { onProgress } = {}) {
+async function askChat(historyMessages, { onProgress, attachments } = {}) {
   const lang = loadPrefs().replyLanguage || "zh-Hant";
-  const answer = await askChatInner(historyMessages, { onProgress });
+  const answer = await askChatInner(historyMessages, { onProgress, attachments });
   return applyLanguageScript(answer, lang);
 }
 
 module.exports = {
   buildSystemPrompt,
+  buildEvaSystemRole,
   askOllama,
+  askTencent,
   askChat,
   askChatInner,
 };

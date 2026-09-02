@@ -1,11 +1,11 @@
-# Register Windows Scheduled Task: Eva KB backup at 16:00 local time.
+# Register Windows Scheduled Task: Eva KB backup at 21:00 local time.
 # Auto-restarts on failure (no user RETRY prompt).
 #   npm run eva:schedule-kb-backup
-#   npm run eva:schedule-kb-backup -- -Time 16:00
+#   npm run eva:schedule-kb-backup -- -Time 21:00
 #   npm run eva:schedule-kb-backup -- -Unregister
 
 param(
-  [string]$Time = "16:00",
+  [string]$Time = "21:00",
   [switch]$Unregister,
   [switch]$WakeToRun
 )

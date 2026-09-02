@@ -11,7 +11,7 @@ contextBridge.exposeInMainWorld("__EVA_CONNECTION__", connection);
 contextBridge.exposeInMainWorld("companion", {
   isDesktop: true,
   // Shared eva-web uses HTTP API; legacy overlay/app.html still uses IPC below.
-  askChat: (history) => ipcRenderer.invoke("ask-chat", history),
+  askChat: (history, extra) => ipcRenderer.invoke("ask-chat", history, extra || {}),
   applyWithCursor: (history) => ipcRenderer.invoke("apply-with-cursor", history),
   askCopilot: (prompt) => ipcRenderer.invoke("ask-copilot", prompt),
   loadChatHistory: () => ipcRenderer.invoke("load-chat-history"),

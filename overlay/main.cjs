@@ -175,6 +175,11 @@ function createMainWindow() {
   mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   loadEvaWeb(mainWindow);
 
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  mainWindow.webContents.session.on("will-download", (event) => {
+    event.preventDefault();
+  });
+
   mainWindow.once("ready-to-show", () => {
     const saved = loadWindowBounds();
     mainWindow.setBounds({
@@ -314,6 +319,10 @@ function watchForUpdates() {
     path.join(evaCoreDir, "llm.cjs"),
     path.join(evaCoreDir, "knowledge.cjs"),
     path.join(evaCoreDir, "server.cjs"),
+    path.join(evaCoreDir, "tencent-lke.cjs"),
+    path.join(evaCoreDir, "tencent-lke-files.cjs"),
+    path.join(evaCoreDir, "persona.cjs"),
+    path.join(evaCoreDir, "prefs.cjs"),
     path.join(__dirname, "..", "eva-web", "dist", "index.html"),
     path.join(__dirname, "..", "package.json"),
     path.join(__dirname, "..", ".env"),
@@ -443,18 +452,19 @@ async function applyWithCursor(historyMessages) {
   return String(result.result ?? "").trim() || "(Cursor finished with empty summary)";
 }
 
-async function askChat(historyMessages, { onProgress } = {}) {
+async function askChat(historyMessages, { onProgress, attachments } = {}) {
   askInFlight += 1;
   try {
-    return await eva.askChat(historyMessages, { onProgress });
+    return await eva.askChat(historyMessages, { onProgress, attachments });
   } finally {
     askInFlight = Math.max(0, askInFlight - 1);
     flushDeferredReload();
   }
 }
 
-ipcMain.handle("ask-chat", async (event, historyMessages) => {
+ipcMain.handle("ask-chat", async (event, historyMessages, extra) => {
   return askChat(historyMessages, {
+    attachments: extra?.attachments,
     onProgress: (info) => {
       try {
         event.sender.send("eva-progress", info || {});

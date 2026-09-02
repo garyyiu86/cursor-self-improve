@@ -2,6 +2,7 @@ import "./style.css";
 import * as api from "./api.js";
 import { features } from "./platform.js";
 import { loadConnection, saveConnection, needsSetup } from "./settings.js";
+import { renderMarkdownInto } from "./markdown.js";
 import { Capacitor } from "@capacitor/core";
 import { Keyboard } from "@capacitor/keyboard";
 
@@ -105,7 +106,22 @@ const mascotHtml = `
 
 const composerInner = `
         <div class="row">
-          <textarea id="prompt" placeholder="Talk to Eva..."></textarea>
+          <div class="prompt-box">
+            <div class="file-chip hidden" id="fileChip">
+              <span class="file-chip-name" id="fileChipName"></span>
+              <button class="file-chip-clear" id="fileChipClear" type="button" title="移除附件">×</button>
+            </div>
+            <div class="prompt-main">
+              <button class="attach" id="attachBtn" type="button" title="揀檔再問" aria-label="揀檔再問">+</button>
+              <textarea id="prompt" placeholder="Talk to Eva..."></textarea>
+            </div>
+            <input
+              type="file"
+              id="chatFile"
+              hidden
+              accept=".txt,.md,.csv,.tsv,.json,.log,.xml,.html,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.png,.jpg,.jpeg,.gif,.webp,.bmp"
+            />
+          </div>
           <div class="actions">
             <button class="send" id="send" type="button">Send</button>
             <button
@@ -118,7 +134,7 @@ const composerInner = `
             </button>
           </div>
         </div>
-        <div class="hint">${
+        <div class="hint" id="modeHint">${
           feat.platform === "android"
             ? "連 PC 上 eva-core（同 Wi‑Fi）。KB → Tavily → LLM。"
             : "Postgres KB → Tavily miss → save → Ollama. Language follows dropdown."
@@ -136,6 +152,10 @@ app.innerHTML =
           <button class="font-btn" id="fontDown" type="button" title="縮小字型">A−</button>
           <button class="font-btn" id="fontUp" type="button" title="放大字型">A+</button>
           <button class="settings-btn" id="settingsBtn" type="button" title="Connection">設定</button>
+          <select class="mode" id="chatMode" title="對答模式">
+            <option value="eva">Eva</option>
+            <option value="tencent">騰訊雲</option>
+          </select>
           <select class="lang" id="lang" title="Reply language (saved across restarts)">
             <option value="zh-Hant">繁中</option>
             <option value="zh-Hans">简中</option>
@@ -185,6 +205,10 @@ app.innerHTML =
         <h1>Eva</h1>
         <div class="top-actions">
           <button class="settings-btn hidden" id="settingsBtn" type="button" title="Connection">設定</button>
+          <select class="mode" id="chatMode" title="對答模式">
+            <option value="eva">Eva</option>
+            <option value="tencent">騰訊雲</option>
+          </select>
           <select class="lang" id="lang" title="Reply language (saved across restarts)">
             <option value="zh-Hant">繁中</option>
             <option value="zh-Hans">简中</option>
@@ -228,8 +252,15 @@ const responseEl = document.getElementById("response");
 const promptEl = document.getElementById("prompt");
 const sendBtn = document.getElementById("send");
 const applyBtn = document.getElementById("apply");
+const attachBtn = document.getElementById("attachBtn");
+const chatFileEl = document.getElementById("chatFile");
+const fileChipEl = document.getElementById("fileChip");
+const fileChipNameEl = document.getElementById("fileChipName");
+const fileChipClearEl = document.getElementById("fileChipClear");
 const clearBtn = document.getElementById("clear");
 const langEl = document.getElementById("lang");
+const chatModeEl = document.getElementById("chatMode");
+const modeHintEl = document.getElementById("modeHint");
 const settingsBtn = document.getElementById("settingsBtn");
 
 if (feat.platform === "android" && promptEl) {
@@ -463,8 +494,25 @@ function contextForModel() {
     .slice(-MAX_CONTEXT_TURNS);
 }
 
-function renderChat({ scrollToBottom = false, preserveScroll = false } = {}) {
+function historySig(list) {
+  return (Array.isArray(list) ? list : [])
+    .map((m) => `${m.role}|${m.ts}|${String(m.content ?? "")}`)
+    .join("\n");
+}
+
+let chatRenderSig = "";
+
+function renderChat({ scrollToBottom = false, preserveScroll = false, force = false } = {}) {
   const prevTop = responseEl.scrollTop;
+  const sig = historySig(history);
+  const alreadyPainted = history.length
+    ? Boolean(responseEl.querySelector(".msg"))
+    : responseEl.classList.contains("muted");
+  if (!force && sig === chatRenderSig && alreadyPainted) {
+    if (scrollToBottom) responseEl.scrollTop = responseEl.scrollHeight;
+    return;
+  }
+  chatRenderSig = sig;
   if (!history.length) {
     responseEl.classList.add("muted");
     responseEl.textContent = feat.platform === "android"
@@ -488,7 +536,8 @@ function renderChat({ scrollToBottom = false, preserveScroll = false } = {}) {
     meta.appendChild(who);
     meta.appendChild(ts);
     const body = document.createElement("div");
-    body.textContent = m.content;
+    body.className = "msg-body";
+    renderMarkdownInto(body, m.content);
     div.appendChild(meta);
     div.appendChild(body);
     responseEl.appendChild(div);
@@ -597,6 +646,9 @@ async function pullHistoryFromServer({ scrollToBottom = false } = {}) {
   try {
     const loaded = await api.loadChatHistory();
     if (!Array.isArray(loaded)) return false;
+    if (historySig(loaded) === chatRenderSig && responseEl.querySelector(".msg")) {
+      return true;
+    }
     history.length = 0;
     history.push(...loaded);
     renderChat(scrollToBottom ? { scrollToBottom: true } : { preserveScroll: true });
@@ -655,7 +707,7 @@ clearBtn.addEventListener("click", async () => {
   } catch (err) {
     console.warn(err);
   }
-  renderChat();
+  renderChat({ force: true });
   promptEl.focus();
 });
 
@@ -667,9 +719,106 @@ langEl.addEventListener("change", async () => {
   }
 });
 
+function hintForMode(mode) {
+  if (mode === "tencent") {
+    return feat.platform === "android"
+      ? "騰訊雲模式：PC 先查本地 KB，再轉發 ADP。可撳 📎 揀檔再問。"
+      : "騰訊雲 ADP 串流對答；可撳 📎 揀檔再問。事實題會先查本地 KB。Clear 會開新 ConversationId。";
+  }
+  return feat.platform === "android"
+    ? "連 PC 上 eva-core（同 Wi‑Fi）。KB → Tavily → LLM。"
+    : "Postgres KB → Tavily miss → save → Ollama. Language follows dropdown.";
+}
+
+function applyChatMode(mode) {
+  const next = mode === "tencent" ? "tencent" : "eva";
+  if (chatModeEl) chatModeEl.value = next;
+  if (modeHintEl) modeHintEl.textContent = hintForMode(next);
+}
+
+chatModeEl?.addEventListener("change", async () => {
+  const chatMode = chatModeEl.value === "tencent" ? "tencent" : "eva";
+  applyChatMode(chatMode);
+  try {
+    await api.savePrefs({ chatMode });
+  } catch (err) {
+    console.warn("save chatMode failed", err);
+  }
+});
+
+const MAX_CHAT_FILE_BYTES = 8 * 1024 * 1024;
+let pendingFile = null;
+
+function renderFileChip() {
+  if (!fileChipEl) return;
+  if (!pendingFile) {
+    fileChipEl.classList.add("hidden");
+    if (fileChipNameEl) fileChipNameEl.textContent = "";
+    return;
+  }
+  fileChipEl.classList.remove("hidden");
+  if (fileChipNameEl) fileChipNameEl.textContent = pendingFile.name;
+}
+
+function clearPendingFile() {
+  pendingFile = null;
+  if (chatFileEl) chatFileEl.value = "";
+  renderFileChip();
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const s = String(reader.result || "");
+      const i = s.indexOf(",");
+      resolve(i >= 0 ? s.slice(i + 1) : s);
+    };
+    reader.onerror = () => reject(new Error("讀檔失敗"));
+    reader.readAsDataURL(file);
+  });
+}
+
+function setComposerBusy(busy) {
+  sendBtn.disabled = busy;
+  if (attachBtn) attachBtn.disabled = busy;
+  if (fileChipClearEl) fileChipClearEl.disabled = busy;
+}
+
+attachBtn?.addEventListener("click", () => {
+  if (chatBusy) return;
+  chatFileEl?.click();
+});
+
+chatFileEl?.addEventListener("change", () => {
+  const file = chatFileEl.files?.[0] || null;
+  if (!file) {
+    clearPendingFile();
+    return;
+  }
+  if (file.size > MAX_CHAT_FILE_BYTES) {
+    alert(`檔案太大（上限 8MB）：${file.name}`);
+    clearPendingFile();
+    return;
+  }
+  pendingFile = file;
+  renderFileChip();
+});
+
+fileChipClearEl?.addEventListener("click", () => {
+  if (chatBusy) return;
+  clearPendingFile();
+});
+
 async function send() {
-  const prompt = promptEl.value.trim();
-  if (!prompt || chatBusy) return;
+  const typed = promptEl.value.trim();
+  if ((!typed && !pendingFile) || chatBusy) return;
+  const file = pendingFile;
+  const prompt = file
+    ? typed
+      ? `📎 ${file.name}\n\n${typed}`
+      : `📎 ${file.name}\n\n請根據呢份檔案回答。`
+    : typed;
   promptEl.value = "";
 
   // Sync from PC before appending, so both sides share one thread
@@ -681,24 +830,38 @@ async function send() {
 
   chatBusy = true;
   setSettingsLocked(true);
-  sendBtn.disabled = true;
+  setComposerBusy(true);
   setMood("thinking");
   const thinking = document.createElement("div");
-  thinking.className = "msg eva muted";
+  thinking.className = "msg eva muted msg-body";
   thinking.dataset.progress = "1";
   thinking.textContent = "Eva 正在處理…";
   responseEl.appendChild(thinking);
   responseEl.scrollTop = responseEl.scrollHeight;
 
   try {
+    let attachments;
+    if (file) {
+      thinking.textContent = `正在讀取 ${file.name}…`;
+      const data = await fileToBase64(file);
+      attachments = [
+        {
+          name: file.name,
+          mime: file.type || "application/octet-stream",
+          size: file.size,
+          data,
+        },
+      ];
+    }
     const answer = await api.askChat(contextForModel(), {
+      attachments,
       onProgress: (info) => {
         const stage = String(info?.stage || "");
         const msg = String(info?.message || "");
         if (stage === "done") return;
         if (stage === "stream") {
           thinking.classList.remove("muted");
-          thinking.textContent = msg || "…";
+          renderMarkdownInto(thinking, msg || "…");
         } else {
           const tip = msg.trim();
           if (!tip) return;
@@ -708,6 +871,7 @@ async function send() {
         responseEl.scrollTop = responseEl.scrollHeight;
       },
     });
+    clearPendingFile();
     history.push({ role: "assistant", content: answer, ts: nowTs() });
     await persist();
     renderChat({ scrollToBottom: true });
@@ -724,7 +888,7 @@ async function send() {
   } finally {
     chatBusy = false;
     setSettingsLocked(false);
-    sendBtn.disabled = false;
+    setComposerBusy(false);
     promptEl.focus();
   }
 }
@@ -752,7 +916,7 @@ applyBtn?.addEventListener("click", async () => {
   chatBusy = true;
   setSettingsLocked(true);
   applyBtn.disabled = true;
-  sendBtn.disabled = true;
+  setComposerBusy(true);
   setMood("thinking");
   history.push({
     role: "assistant",
@@ -787,7 +951,7 @@ applyBtn?.addEventListener("click", async () => {
     chatBusy = false;
     setSettingsLocked(false);
     applyBtn.disabled = false;
-    sendBtn.disabled = false;
+    setComposerBusy(false);
     promptEl.focus();
   }
 });
@@ -796,6 +960,7 @@ async function bootstrapChat() {
   try {
     const prefs = await api.loadPrefs();
     if (prefs?.replyLanguage) langEl.value = prefs.replyLanguage;
+    applyChatMode(prefs?.chatMode || "eva");
   } catch (err) {
     console.warn("load prefs failed", err);
   }

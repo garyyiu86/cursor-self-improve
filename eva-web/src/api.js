@@ -12,6 +12,20 @@ function apiUrl(path) {
   return `${baseUrl}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
+export function mediaUrl(raw) {
+  const href = String(raw || "").trim();
+  if (!/^https?:\/\//i.test(href)) return href;
+  try {
+    const host = new URL(href).hostname;
+    if (!/(\.myqcloud\.com|\.tencentcloud\.com|\.tencent\.com)$/i.test(host)) {
+      return href;
+    }
+  } catch {
+    return href;
+  }
+  return apiUrl(`/api/media?u=${encodeURIComponent(href)}`);
+}
+
 async function parseJson(res) {
   const text = await res.text();
   let data = null;
@@ -74,11 +88,14 @@ export async function clearChatHistory() {
  * POST /api/chat → SSE progress. Resolves with final answer string.
  * onProgress({ stage, message })
  */
-export async function askChat(messages, { onProgress } = {}) {
+export async function askChat(messages, { onProgress, attachments } = {}) {
   const res = await fetch(apiUrl("/api/chat"), {
     method: "POST",
     headers: authHeaders({ "Content-Type": "application/json", Accept: "text/event-stream" }),
-    body: JSON.stringify({ messages: messages || [] }),
+    body: JSON.stringify({
+      messages: messages || [],
+      attachments: Array.isArray(attachments) && attachments.length ? attachments : undefined,
+    }),
   });
 
   if (!res.ok) {

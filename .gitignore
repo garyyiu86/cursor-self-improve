@@ -6,7 +6,6 @@ dist/
 .venv-lora/
 finetune/output/
 finetune/ollama/*.gguf
-overlay/data/
 training/data/*.jsonl
 !training/data/eva-style-seeds.jsonl
 training/data/eva-export-meta.json

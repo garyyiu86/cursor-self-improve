@@ -11,7 +11,16 @@ Shared architecture:
 Electron / Android APK
         │  HTTP + SSE (+ Bearer token)
         ▼
-   eva-core :8787  →  Ollama (127.0.0.1) / Postgres KB / Tavily
+   eva-core :8787  →  Eva LLM (Ollama / OpenRouter / …)  或  騰訊雲 ADP
+```
+
+UI 右上角可切 **Eva** / **騰訊雲**。騰訊雲模式會把最新一句 user 訊息送到 `https://wss.lke.tencentcloud.com/adp/v2/chat`，並每次帶上 Eva 人設（`SystemRole`）。事實題會先查本地 Postgres KB（miss 再 Tavily），把命中資料一併塞進 `SystemRole` 畀 ADP。ConversationId 由本機持久化；Clear 會開新會話。
+
+`.env` 需要：
+
+```env
+TENCENT_LKE_APP_KEY=your_app_key
+TENCENT_LKE_VISITOR_ID=your_visitor_id
 ```
 
 ## Quick start (PC)
@@ -46,12 +55,15 @@ npm run eva:server
 
 ### 常識自問自答（擴 KB，唔 fine-tune）
 
-Postgres + `TAVILY_API_KEY` 要就緒。Eva 會由種子題／主題 **自問**，用 Tavily **查證後寫入 KB**：
+Postgres + `TAVILY_API_KEY` 要就緒（Eva 模式）。Eva 會由種子題／主題 **自問**，用 Tavily **查證後寫入 KB**：
 
 ```bash
 npm run kb:up
 npm run kb:init
 npm run eva:self-drill
+# 騰訊雲出題＋作答（Tavily 有就一併查證；唔強制）:
+# npm run eva:self-drill -- --mode tencent
+# npm run eva:self-drill -- --mode tencent --infinite
 # 無限循環（每輪 LLM 出新題，Ctrl+C 停）:
 # npm run eva:self-drill -- --infinite
 # 一次過唔截斷 / 少啲題:
@@ -59,7 +71,7 @@ npm run eva:self-drill
 # npm run eva:self-drill -- --limit 5 --no-llm
 ```
 
-題庫：`overlay/data/self-drill-common-sense.txt`（`Q:` = 現成問題；其他行 = 主題畀 LLM 擴）。
+題庫：`overlay/data/self-drill-common-sense.txt`（冇檔會自動建立）。主題行畀 LLM／騰訊雲**自己出題**；`Q:` 係可選現成問題。
 
 ### KB + LoRA（兩層同時）
 
@@ -172,10 +184,10 @@ All routes require `Authorization: Bearer <EVA_API_TOKEN>`.
 
 | Method | Path | Notes |
 |--------|------|--------|
-| GET | `/api/health` | `{ ok, kb }` |
+| GET | `/api/health` | `{ ok, kb, chatMode, tencent }` |
 | POST | `/api/chat` | body `{ messages }`, SSE stages: kb/search/think/stream → `answer` → `done` |
 | GET/PUT/DELETE | `/api/history` | shared server-side history |
-| GET/PATCH | `/api/prefs` | e.g. `{ replyLanguage }` |
+| GET/PATCH | `/api/prefs` | e.g. `{ replyLanguage, chatMode }` (`eva` \| `tencent`) |
 
 Example health check:
 
@@ -207,8 +219,10 @@ Invoke-RestMethod -Headers @{ Authorization = "Bearer $token" } http://127.0.0.1
 | `npm run eva:export-train` | 匯出 JSONL（`--mode personal` 偏人設） |
 | `npm run eva:train-lora` | peft LoRA 訓練 |
 | `npm run eva:merge-lora` | Merge LoRA → GGUF → ollama create |
+| `npm run kb:up` | Start local Postgres (`eva_kb` on `:5433`) |
+| `npm run kb:restore` | Restore `backups/kb/eva_kb_latest.json` into Postgres |
 | `npm run eva:backup-kb` | Dump KB → `backups/kb/` + commit + push |
-| `npm run eva:schedule-kb-backup` | 註冊／取消每日 **16:00** KB backup 排程 |
+| `npm run eva:schedule-kb-backup` | 註冊／取消每日 **21:00** KB backup 排程 |
 | `npm run eva:daily-train` | 每日腳本：export（+ 可選 LoRA） |
 | `npm run eva:schedule-train` | 註冊／取消 Windows 06:00 排程 |
 

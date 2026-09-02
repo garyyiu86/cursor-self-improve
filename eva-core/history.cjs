@@ -30,6 +30,9 @@ function saveChatHistory(historyMessages) {
 function clearChatHistory() {
   const p = chatHistoryPath();
   if (fs.existsSync(p)) fs.unlinkSync(p);
+  try {
+    require("./tencent-lke.cjs").resetTencentConversation();
+  } catch (_) {}
   return [];
 }
 

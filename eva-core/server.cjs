@@ -1,18 +1,23 @@
 require("./log.cjs");
 const http = require("node:http");
+const https = require("node:https");
 const crypto = require("node:crypto");
 const path = require("node:path");
 
 const eva = require("./index.cjs");
 const knowledgeDb = require("./knowledge-db.cjs");
 const { kbEnabled } = require("./knowledge.cjs");
+const { tencentLkeConfigured } = require("./tencent-lke.cjs");
+const { tencentUploadConfigured } = require("./tencent-lke-files.cjs");
 
-function readJsonBody(req) {
+function readJsonBody(req, maxBytes = 2 * 1024 * 1024) {
+  const limit =
+    Number.isFinite(maxBytes) && maxBytes > 0 ? maxBytes : 2 * 1024 * 1024;
   return new Promise((resolve, reject) => {
     let data = "";
     req.on("data", (chunk) => {
       data += chunk;
-      if (data.length > 2 * 1024 * 1024) {
+      if (data.length > limit) {
         reject(new Error("Body too large"));
         req.destroy();
       }
@@ -54,6 +59,92 @@ function ensureApiToken() {
   return token;
 }
 
+function isAllowedMediaHost(hostname) {
+  return /(\.myqcloud\.com|\.tencentcloud\.com|\.tencent\.com)$/i.test(
+    String(hostname || ""),
+  );
+}
+
+function proxyMedia(req, res, rawUrl, hops = 0) {
+  let target;
+  try {
+    target = new URL(String(rawUrl || ""));
+  } catch {
+    sendJson(res, 400, { error: "Invalid media URL" });
+    return;
+  }
+  if (target.protocol !== "https:" && target.protocol !== "http:") {
+    sendJson(res, 400, { error: "Invalid media URL" });
+    return;
+  }
+  if (!isAllowedMediaHost(target.hostname)) {
+    sendJson(res, 400, { error: "Unsupported media host" });
+    return;
+  }
+  const lib = target.protocol === "https:" ? https : http;
+  const maxBytes = 8 * 1024 * 1024;
+  const upstream = lib.request(
+    {
+      protocol: target.protocol,
+      hostname: target.hostname,
+      port: target.port || (target.protocol === "https:" ? 443 : 80),
+      path: `${target.pathname}${target.search}`,
+      method: "GET",
+      headers: {
+        Accept: "*/*",
+        "User-Agent": "EvaMedia/1.0",
+      },
+      family: 4,
+      timeout: 25000,
+    },
+    (up) => {
+      if (up.statusCode >= 300 && up.statusCode < 400 && up.headers.location) {
+        up.resume();
+        if (hops >= 3) {
+          sendJson(res, 502, { error: "Too many redirects" });
+          return;
+        }
+        try {
+          proxyMedia(req, res, new URL(up.headers.location, target).toString(), hops + 1);
+        } catch {
+          sendJson(res, 502, { error: "Invalid redirect" });
+        }
+        return;
+      }
+      const type = String(up.headers["content-type"] || "application/octet-stream");
+      if (up.statusCode >= 400) {
+        res.writeHead(up.statusCode, {
+          "Content-Type": type,
+          "Access-Control-Allow-Origin": "*",
+        });
+        up.pipe(res);
+        return;
+      }
+      res.writeHead(200, {
+        "Content-Type": type,
+        "Content-Disposition": "inline",
+        "Cache-Control": "private, max-age=3600",
+        "Access-Control-Allow-Origin": "*",
+      });
+      let seen = 0;
+      up.on("data", (chunk) => {
+        seen += chunk.length;
+        if (seen > maxBytes) {
+          up.destroy();
+          res.destroy();
+        }
+      });
+      up.pipe(res);
+    },
+  );
+  upstream.on("error", () => {
+    if (!res.headersSent) sendJson(res, 502, { error: "Media fetch failed" });
+    else res.destroy();
+  });
+  upstream.on("timeout", () => upstream.destroy());
+  upstream.end();
+}
+
 function checkAuth(req, res, token) {
   const auth = String(req.headers.authorization || "");
   const expected = `Bearer ${token}`;
@@ -83,11 +174,23 @@ function startServer(options = {}) {
       return;
     }
 
+    if (req.method === "GET" && pathname === "/api/media") {
+      proxyMedia(req, res, url.searchParams.get("u"));
+      return;
+    }
+
     if (!checkAuth(req, res, token)) return;
 
     try {
       if (req.method === "GET" && pathname === "/api/health") {
-        sendJson(res, 200, { ok: true, kb: kbEnabled() && knowledgeDb.isReady() });
+        const prefs = eva.loadPrefs();
+        sendJson(res, 200, {
+          ok: true,
+          kb: kbEnabled() && knowledgeDb.isReady(),
+          chatMode: prefs.chatMode || "eva",
+          tencent: tencentLkeConfigured(),
+          tencentUpload: tencentUploadConfigured(),
+        });
         return;
       }
 
@@ -123,7 +226,7 @@ function startServer(options = {}) {
       }
 
       if (req.method === "POST" && pathname === "/api/chat") {
-        const body = await readJsonBody(req);
+        const body = await readJsonBody(req, 12 * 1024 * 1024);
         const messages = body?.messages;
         if (!Array.isArray(messages)) {
           sendJson(res, 400, { error: "Expected { messages: [...] }" });
@@ -141,6 +244,7 @@ function startServer(options = {}) {
         let answer = "";
         try {
           answer = await eva.askChat(messages, {
+            attachments: body?.attachments,
             onProgress: (info) => {
               const stage = info?.stage || "think";
               const message = String(info?.message ?? "");

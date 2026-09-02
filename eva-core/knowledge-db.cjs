@@ -319,6 +319,7 @@ async function closeKnowledgeDb() {
 module.exports = {
   initKnowledgeDb,
   isReady,
+  getPool,
   searchKnowledgeBase,
   addKnowledgeEntry,
   countKnowledgeEntries,

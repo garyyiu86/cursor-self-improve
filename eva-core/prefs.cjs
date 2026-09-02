@@ -6,11 +6,15 @@ function prefsPath() {
   return path.join(getDataDir(), "prefs.json");
 }
 
+const LANGS = new Set(["auto", "zh-Hant", "zh-Hans", "en"]);
+const CHAT_MODES = new Set(["eva", "tencent"]);
+
 function defaultPrefs() {
   const fromEnv = (process.env.EVA_REPLY_LANGUAGE || "").trim();
-  const allowed = new Set(["auto", "zh-Hant", "zh-Hans", "en"]);
+  const modeEnv = String(process.env.EVA_CHAT_MODE || "").trim().toLowerCase();
   return {
-    replyLanguage: allowed.has(fromEnv) ? fromEnv : "zh-Hant",
+    replyLanguage: LANGS.has(fromEnv) ? fromEnv : "zh-Hant",
+    chatMode: CHAT_MODES.has(modeEnv) ? modeEnv : "eva",
   };
 }
 
@@ -21,9 +25,10 @@ function loadPrefs() {
     const raw = JSON.parse(fs.readFileSync(p, "utf8"));
     const base = defaultPrefs();
     const lang = String(raw.replyLanguage || base.replyLanguage);
-    const allowed = new Set(["auto", "zh-Hant", "zh-Hans", "en"]);
+    const mode = String(raw.chatMode || base.chatMode).trim().toLowerCase();
     return {
-      replyLanguage: allowed.has(lang) ? lang : base.replyLanguage,
+      replyLanguage: LANGS.has(lang) ? lang : base.replyLanguage,
+      chatMode: CHAT_MODES.has(mode) ? mode : base.chatMode,
     };
   } catch {
     return defaultPrefs();
@@ -32,8 +37,9 @@ function loadPrefs() {
 
 function savePrefs(patch) {
   const next = { ...loadPrefs(), ...(patch || {}) };
-  const allowed = new Set(["auto", "zh-Hant", "zh-Hans", "en"]);
-  if (!allowed.has(next.replyLanguage)) next.replyLanguage = "zh-Hant";
+  if (!LANGS.has(next.replyLanguage)) next.replyLanguage = "zh-Hant";
+  next.chatMode = String(next.chatMode || "eva").trim().toLowerCase();
+  if (!CHAT_MODES.has(next.chatMode)) next.chatMode = "eva";
   fs.writeFileSync(prefsPath(), JSON.stringify(next, null, 2), "utf8");
   return next;
 }

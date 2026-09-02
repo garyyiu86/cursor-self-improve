@@ -1,6 +1,10 @@
 const path = require("node:path");
 const fs = require("node:fs");
 
+try {
+  require("node:dns").setDefaultResultOrder("ipv4first");
+} catch (_) {}
+
 let _dataDir = null;
 const _repoRoot = path.join(__dirname, "..");
 const _overlayDir = path.join(_repoRoot, "overlay");

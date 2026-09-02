@@ -11,7 +11,8 @@
  *   npm run eva:self-drill -- --gen 5
  *   npm run eva:self-drill -- --no-llm
  *   npm run eva:self-drill -- --force
- *   npm run eva:self-drill -- --delay 1500
+ *   npm run eva:self-drill -- --mode tencent
+ *   npm run eva:self-drill -- --mode tencent --infinite
  */
 require("../../eva-core/log.cjs");
 const path = require("node:path");
@@ -20,7 +21,11 @@ const fs = require("node:fs");
 const { loadEnvFile, getRepoRoot } = require("../../eva-core/env.cjs");
 const { tavilySearchRaw, formatTavilyNotes, tavilyEnabled } = require("../../eva-core/tavily.cjs");
 const { llmChatOnce } = require("../../eva-core/llm.cjs");
+const { tencentLkeConfigured, tencentLkeChat } = require("../../eva-core/tencent-lke.cjs");
 const kb = require("../../eva-core/knowledge-db.cjs");
+
+const DRILL_SESSION = "tencent-lke-drill";
+const DRILL_MODES = new Set(["eva", "tencent"]);
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
@@ -39,6 +44,7 @@ function parseArgs(argv) {
     useLlm: true,
     infinite: false,
     help: false,
+    mode: String(process.env.EVA_SELF_DRILL_MODE || "eva").trim().toLowerCase() || "eva",
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -61,32 +67,90 @@ function parseArgs(argv) {
       out.useLlm = false;
     } else if (a === "--infinite" || a === "-i" || a === "--loop") {
       out.infinite = true;
+    } else if (a === "--mode") {
+      out.mode = String(argv[++i] || out.mode).trim().toLowerCase();
+    } else if (a === "--tencent") {
+      out.mode = "tencent";
     } else if (a === "--help" || a === "-h") {
       out.help = true;
     }
   }
   if (!out.batch) out.batch = out.gen > 0 ? out.gen : 5;
+  if (!DRILL_MODES.has(out.mode)) out.mode = "eva";
   return out;
 }
 
+const DEFAULT_TOPICS = [
+  "天氣同季節",
+  "人體健康常識",
+  "飲食營養",
+  "地球同天文",
+  "植物同動物",
+  "物理日常現象",
+  "化學生活常識",
+  "地理同國家",
+  "歷史大事",
+  "香港生活常識",
+  "交通安全",
+  "環保同能源",
+  "電腦同網絡",
+  "數學生活應用",
+  "海洋同氣候",
+  "電器同家居",
+  "傳染病同防疫",
+  "運動同睡眠",
+  "貨幣同經濟常識",
+  "時間同曆法",
+];
+
+function defaultSeedText() {
+  return [
+    "# Eva 常識自問自答題庫",
+    "# 主題行：畀 LLM／騰訊雲自行擴成問題",
+    "# Q: 現成問題（可選；冇都得，程式會自己出題）",
+    "",
+    ...DEFAULT_TOPICS,
+    "",
+  ].join("\n");
+}
+
+function ensureSeedFile(filePath) {
+  if (fs.existsSync(filePath) && fs.statSync(filePath).size > 0) return false;
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  const template = path.join(getRepoRoot(), "overlay", "self-drill-common-sense.txt");
+  if (fs.existsSync(template)) {
+    fs.copyFileSync(template, filePath);
+  } else {
+    fs.writeFileSync(filePath, `${defaultSeedText()}\n`, "utf8");
+  }
+  console.log(`[eva:self-drill] 已建立預設題庫 ${filePath}`);
+  return true;
+}
+
 function loadSeedFile(filePath) {
+  ensureSeedFile(filePath);
   const questions = [];
   const topics = [];
-  if (!fs.existsSync(filePath)) return { questions, topics };
-  for (const line of fs.readFileSync(filePath, "utf8").split(/\r?\n/)) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    if (/^Q[:：]\s*/i.test(trimmed)) {
-      const q = trimmed.replace(/^Q[:：]\s*/i, "").trim();
-      if (q) questions.push(q);
-      continue;
+  if (fs.existsSync(filePath)) {
+    for (const line of fs.readFileSync(filePath, "utf8").split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      if (/^Q[:：]\s*/i.test(trimmed)) {
+        const q = trimmed.replace(/^Q[:：]\s*/i, "").trim();
+        if (q) questions.push(q);
+        continue;
+      }
+      if (/^主題[:：]\s*/.test(trimmed)) {
+        const t = trimmed.replace(/^主題[:：]\s*/, "").trim();
+        if (t) topics.push(t);
+        continue;
+      }
+      topics.push(trimmed);
     }
-    if (/^主題[:：]\s*/.test(trimmed)) {
-      const t = trimmed.replace(/^主題[:：]\s*/, "").trim();
-      if (t) topics.push(t);
-      continue;
-    }
-    topics.push(trimmed);
+  }
+  if (!topics.length) {
+    topics.push(...DEFAULT_TOPICS);
+    console.log("[eva:self-drill] 檔案冇主題，改用內建常識主題自行出題");
   }
   return { questions, topics };
 }
@@ -125,9 +189,35 @@ function parseGeneratedQuestions(text, max) {
   return uniqueQuestions(lines).slice(0, max);
 }
 
-async function generateQuestionsFromTopics(topics, count) {
+async function tencentDrillChat(userText, systemRole) {
+  return tencentLkeChat(userText, {
+    systemRole,
+    sessionName: DRILL_SESSION,
+  });
+}
+
+async function generateQuestionsFromTopics(topics, count, { mode } = {}) {
   if (!count || !topics.length) return [];
   const picked = shuffle(topics).slice(0, Math.min(8, topics.length));
+  const promptUser = [
+    `請就以下主題產出剛好 ${count} 條常識問答題（只要問題）：`,
+    ...picked.map((t) => `- ${t}`),
+  ].join("\n");
+  const promptSystem = [
+    "你係常識出題助手。只輸出問題清單，每行一條，用繁體中文。",
+    "題目要係可查證嘅常識／科普／日常知識，唔好意見題、唔好私人問題。",
+    "每條以問號結尾。唔好編號以外嘅解釋。",
+    "每次要出唔同角度嘅新題，避免重複老套同一條。",
+  ].join("\n");
+
+  if (mode === "tencent") {
+    console.log(
+      `[eva:self-drill] 騰訊雲出題 ×${count} topics=${picked.slice(0, 4).join("、")}${picked.length > 4 ? "…" : ""}`,
+    );
+    const text = await tencentDrillChat(promptUser, promptSystem);
+    return parseGeneratedQuestions(text, count);
+  }
+
   const drillLlm = String(process.env.EVA_SELF_DRILL_LLM || "ollama").trim().toLowerCase() || "ollama";
   const prevLlm = process.env.EVA_LLM;
   process.env.EVA_LLM = drillLlm;
@@ -141,22 +231,8 @@ async function generateQuestionsFromTopics(topics, count) {
       numPredict: 400,
       numCtx: 2048,
       messages: [
-        {
-          role: "system",
-          content: [
-            "你係常識出題助手。只輸出問題清單，每行一條，用繁體中文。",
-            "題目要係可查證嘅常識／科普／日常知識，唔好意見題、唔好私人問題。",
-            "每條以問號結尾。唔好編號以外嘅解釋。",
-            "每次要出唔同角度嘅新題，避免重複老套同一條。",
-          ].join("\n"),
-        },
-        {
-          role: "user",
-          content: [
-            `請就以下主題產出剛好 ${count} 條常識問答題（只要問題）：`,
-            ...picked.map((t) => `- ${t}`),
-          ].join("\n"),
-        },
+        { role: "system", content: promptSystem },
+        { role: "user", content: promptUser },
       ],
     });
     return parseGeneratedQuestions(text, count);
@@ -166,7 +242,7 @@ async function generateQuestionsFromTopics(topics, count) {
   }
 }
 
-async function drillOne(query, { skipExisting, minScore, tag }) {
+async function drillOne(query, { skipExisting, minScore, tag, mode }) {
   if (skipExisting) {
     const hits = await kb.searchKnowledgeBase(query, 1);
     const top = hits[0];
@@ -174,6 +250,50 @@ async function drillOne(query, { skipExisting, minScore, tag }) {
       console.log(`${tag} skip (KB score=${top.score.toFixed(1)}) ${query}`);
       return "skipped";
     }
+  }
+
+  if (mode === "tencent") {
+    console.log(`${tag} 自問 → 騰訊雲自答… ${query}`);
+    let tavilyNotes = "";
+    let sources = [];
+    let tavilyAnswer = "";
+    if (tavilyEnabled()) {
+      try {
+        const raw = await tavilySearchRaw(query);
+        tavilyNotes = formatTavilyNotes(raw);
+        sources = raw.sources || [];
+        tavilyAnswer = String(raw.answer || "").trim();
+      } catch (err) {
+        console.warn(`${tag} Tavily optional fail: ${err?.message || err}`);
+      }
+    }
+    const systemRole = [
+      "你係常識解答助手。用簡潔繁體中文回答一條可查證嘅常識題。",
+      "只輸出答案正文，唔好客套、唔好標題。",
+      "如果資料不足就講明唔肯定，唔好編造數字、人名、日期。",
+      tavilyNotes && tavilyNotes !== "(No Tavily results)"
+        ? `已搜尋到以下資料，請據此作答（可改寫，唔好原文照抄）：\n${tavilyNotes.slice(0, 3500)}`
+        : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+    const answer = String(await tencentDrillChat(query, systemRole) || "").trim();
+    if (!answer) {
+      console.warn(`${tag} empty — ${query}`);
+      return "empty";
+    }
+    const notes = [`[self-drill/tencent]`, answer];
+    if (tavilyNotes && tavilyNotes !== "(No Tavily results)") {
+      notes.push("", tavilyNotes);
+    }
+    const entry = await kb.addKnowledgeEntry({
+      query,
+      answer: tavilyAnswer || answer,
+      notes: notes.join("\n"),
+      sources,
+    });
+    console.log(`${tag} 自答已入 KB id=${entry.id}`);
+    return "saved";
   }
 
   console.log(`${tag} 自問 → Tavily 查證… ${query}`);
@@ -204,6 +324,7 @@ async function drillBatch(questions, args, minScore, totals) {
         skipExisting: args.skipExisting,
         minScore,
         tag,
+        mode: args.mode,
       });
       if (status === "saved") totals.saved += 1;
       else if (status === "skipped") totals.skipped += 1;
@@ -222,7 +343,9 @@ async function collectOnce(args, seed) {
   let questions = [...seed.questions];
   if (args.useLlm && args.gen > 0 && seed.topics.length) {
     try {
-      const generated = await generateQuestionsFromTopics(seed.topics, args.gen);
+      const generated = await generateQuestionsFromTopics(seed.topics, args.gen, {
+        mode: args.mode,
+      });
       console.log(`[eva:self-drill] LLM 產出 ${generated.length} 條`);
       questions = questions.concat(generated);
     } catch (err) {
@@ -240,7 +363,9 @@ async function collectRound(args, seed, round) {
   const n = args.batch;
   if (args.useLlm && seed.topics.length) {
     try {
-      const generated = await generateQuestionsFromTopics(seed.topics, n);
+      const generated = await generateQuestionsFromTopics(seed.topics, n, {
+        mode: args.mode,
+      });
       console.log(`[eva:self-drill] round ${round} LLM 產出 ${generated.length} 條`);
       if (generated.length) return uniqueQuestions(shuffle(generated));
     } catch (err) {
@@ -268,14 +393,21 @@ async function main() {
   npm run eva:self-drill -- --no-llm
   npm run eva:self-drill -- --force
   npm run eva:self-drill -- --delay 1500
-  npm run eva:self-drill -- --round-delay 3000`);
+  npm run eva:self-drill -- --round-delay 3000
+  npm run eva:self-drill -- --mode tencent
+  npm run eva:self-drill -- --mode tencent --infinite`);
     return;
   }
 
   if (!process.env.EVA_DATABASE_URL && !process.env.DATABASE_URL) {
     process.env.EVA_DATABASE_URL = "postgres://eva:eva@127.0.0.1:5433/eva_kb";
   }
-  if (!tavilyEnabled()) {
+  if (args.mode === "tencent") {
+    if (!tencentLkeConfigured()) {
+      console.error("[eva:self-drill] --mode tencent 需要 TENCENT_LKE_APP_KEY");
+      process.exit(1);
+    }
+  } else if (!tavilyEnabled()) {
     console.error("[eva:self-drill] 需要 TAVILY_API_KEY（用搜尋查證，避免幻覺入 KB）");
     process.exit(1);
   }
@@ -314,7 +446,7 @@ async function main() {
 
   if (args.infinite) {
     console.log(
-      `[eva:self-drill] ∞ infinite batch=${args.batch} delay=${args.delayMs}ms roundDelay=${args.roundDelayMs}ms — Ctrl+C 停止`,
+      `[eva:self-drill] ∞ infinite mode=${args.mode} batch=${args.batch} delay=${args.delayMs}ms roundDelay=${args.roundDelayMs}ms — Ctrl+C 停止`,
     );
     console.log(`[eva:self-drill] KB count=${before}`);
     let round = 0;
@@ -338,7 +470,7 @@ async function main() {
       process.exit(1);
     }
     console.log(
-      `[eva:self-drill] start count=${before} n=${questions.length} delay=${args.delayMs}ms skipExisting=${args.skipExisting}`,
+      `[eva:self-drill] start mode=${args.mode} count=${before} n=${questions.length} delay=${args.delayMs}ms skipExisting=${args.skipExisting}`,
     );
     await drillBatch(questions, args, minScore, totals);
   }
