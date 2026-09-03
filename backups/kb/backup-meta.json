@@ -1,7 +1,7 @@
 {
-  "exportedAt": "2026-09-02T13:00:06.125Z",
-  "count": 403,
+  "exportedAt": "2026-09-03T13:00:06.763Z",
+  "count": 459,
   "latestJson": "backups/kb/eva_kb_latest.json",
   "latestSql": null,
-  "archiveJson": "backups/kb/archive/eva_kb_2026-09-02T13-00-06-124Z.json"
+  "archiveJson": "backups/kb/archive/eva_kb_2026-09-03T13-00-06-763Z.json"
 }
