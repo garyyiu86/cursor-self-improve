@@ -158,7 +158,7 @@ function createMainWindow() {
     resizable: false,
     maximizable: false,
     fullscreenable: false,
-    skipTaskbar: false,
+    skipTaskbar: true,
     alwaysOnTop: true,
     hasShadow: false,
     show: false,
@@ -189,6 +189,7 @@ function createMainWindow() {
       height: WINDOW_HEIGHT,
     });
     mainWindow.show();
+    mainWindow.setSkipTaskbar(true);
     mainWindow.moveTop();
     mainWindow.focus();
   });
