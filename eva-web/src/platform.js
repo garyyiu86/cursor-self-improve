@@ -31,7 +31,6 @@ export function features() {
     // Mascot + expression animations on both PC and Android
     mascot: true,
     drag: desktop && typeof window.companion?.dragStart === "function",
-    applyWithCursor: desktop && typeof window.companion?.applyWithCursor === "function",
     connectionSettings: !desktop,
     transparentShell: desktop,
   };

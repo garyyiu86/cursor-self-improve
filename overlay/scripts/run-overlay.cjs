@@ -5,6 +5,7 @@
  */
 const { spawn } = require("node:child_process");
 const path = require("node:path");
+const { withSystemCa } = require("../../eva-core/env.cjs");
 
 const root = path.join(__dirname, "..", "..");
 const electronBin = require("electron");
@@ -17,11 +18,11 @@ function start() {
   console.log("[overlay-runner] starting Electron…");
   child = spawn(electronBin, ["."], {
     cwd: root,
-    env: {
+    env: withSystemCa({
       ...process.env,
       EVA_UNDER_RUNNER: "1",
       EVA_RESTART_EXIT_CODE: String(RESTART_CODE),
-    },
+    }),
     stdio: "inherit",
     windowsHide: false,
   });

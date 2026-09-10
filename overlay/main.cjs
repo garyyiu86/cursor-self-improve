@@ -6,6 +6,8 @@ const crypto = require("node:crypto");
 const eva = require("../eva-core");
 const knowledgeDb = require("./knowledge-db.cjs");
 const { startServer } = require("../eva-core/server.cjs");
+const { runCursorPrompt } = require("../eva-core/cursor-agent.cjs");
+const { runEvolveLoop } = require("../eva-core/evolve.cjs");
 
 let apiServer = null;
 
@@ -322,6 +324,9 @@ function watchForUpdates() {
     path.join(evaCoreDir, "server.cjs"),
     path.join(evaCoreDir, "tencent-lke.cjs"),
     path.join(evaCoreDir, "tencent-lke-files.cjs"),
+    path.join(evaCoreDir, "cursor-agent.cjs"),
+    path.join(evaCoreDir, "tls-ca.cjs"),
+    path.join(evaCoreDir, "evolve.cjs"),
     path.join(evaCoreDir, "persona.cjs"),
     path.join(evaCoreDir, "prefs.cjs"),
     path.join(__dirname, "..", "eva-web", "dist", "index.html"),
@@ -395,14 +400,7 @@ function createTray() {
   tray.on("double-click", () => focusEvaWindow());
 }
 
-async function applyWithCursor(historyMessages) {
-  const apiKey = process.env.CURSOR_API_KEY;
-  if (!apiKey) {
-    throw new Error(
-      "Missing CURSOR_API_KEY in .env. Create one at https://cursor.com/dashboard/api",
-    );
-  }
-
+async function applyWithCursor(historyMessages, { onProgress } = {}) {
   const history = Array.isArray(historyMessages) ? historyMessages : [];
   const transcript = history
     .filter((m) => m && (m.role === "user" || m.role === "assistant"))
@@ -411,7 +409,8 @@ async function applyWithCursor(historyMessages) {
       return (
         !c.startsWith("Applying with Cursor") &&
         !c.startsWith("Cursor apply result:") &&
-        !c.startsWith("Cursor apply failed:")
+        !c.startsWith("Cursor apply failed:") &&
+        !c.startsWith("自動進化")
       );
     })
     .map((m) => {
@@ -424,33 +423,20 @@ async function applyWithCursor(historyMessages) {
     throw new Error("No chat history to apply.");
   }
 
-  const projectRoot = path.join(__dirname, "..");
-  const { Agent } = await import("@cursor/sdk");
-
-  const result = await Agent.prompt(
+  return await runCursorPrompt(
     [
       "You are Cursor Agent working inside this repository.",
       "The user confirmed they want you to APPLY code changes based on the Eva chat below.",
       "Implement the requested changes with minimal, focused edits.",
-      "Do not expand scope. Prefer editing existing files over creating new ones unless needed.",
+      "Do not launch subagents. Do not expand scope. Prefer editing existing files over creating new ones unless needed.",
       "When done, briefly summarize what files you changed.",
       "",
       "=== Eva chat transcript ===",
       transcript,
       "=== end transcript ===",
     ].join("\n"),
-    {
-      apiKey,
-      model: { id: "composer-2.5" },
-      local: { cwd: projectRoot },
-    },
+    { onProgress },
   );
-
-  if (result.status === "error") {
-    throw new Error(`Cursor agent error (run ${result.id})`);
-  }
-
-  return String(result.result ?? "").trim() || "(Cursor finished with empty summary)";
 }
 
 async function askChat(historyMessages, { onProgress, attachments } = {}) {
@@ -474,10 +460,37 @@ ipcMain.handle("ask-chat", async (event, historyMessages, extra) => {
   });
 });
 
-ipcMain.handle("apply-with-cursor", async (_event, historyMessages) => {
+ipcMain.handle("apply-with-cursor", async (event, historyMessages) => {
   askInFlight += 1;
   try {
-    return await applyWithCursor(historyMessages);
+    return await applyWithCursor(historyMessages, {
+      onProgress: (info) => {
+        try {
+          event.sender.send("eva-progress", info || {});
+        } catch (_) {}
+      },
+    });
+  } finally {
+    askInFlight = Math.max(0, askInFlight - 1);
+    flushDeferredReload();
+  }
+});
+
+ipcMain.handle("evolve-with-cursor", async (event, historyMessages) => {
+  askInFlight += 1;
+  try {
+    return await runEvolveLoop({
+      historyMessages,
+      onProgress: (info) => {
+        try {
+          event.sender.send("eva-progress", info || {});
+        } catch (_) {}
+      },
+    }).then((result) =>
+      result && typeof result === "object"
+        ? result.chatSummary || result.summary || ""
+        : String(result || ""),
+    );
   } finally {
     askInFlight = Math.max(0, askInFlight - 1);
     flushDeferredReload();
@@ -520,11 +533,6 @@ app.whenReady().then(async () => {
   eva.loadEnvFile(path.join(__dirname, ".."));
   eva.setDataDir(overlayDataDir());
   try {
-    await knowledgeDb.initKnowledgeDb();
-  } catch (err) {
-    console.warn("[Eva][KB] init skipped:", err?.message || err);
-  }
-  try {
     if (process.env.EVA_EMBEDDED_API !== "0") {
       apiServer = await startServer();
       console.log("[Eva] Embedded API server ready for eva-web / Android clients");
@@ -536,6 +544,9 @@ app.whenReady().then(async () => {
   createMainWindow();
   createTray();
   watchForUpdates();
+  knowledgeDb.initKnowledgeDb().catch((err) => {
+    console.warn("[Eva][KB] init skipped:", err?.message || err);
+  });
   eva.warmLlmModel().catch(() => {});
 });
 

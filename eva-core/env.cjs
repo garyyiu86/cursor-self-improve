@@ -5,6 +5,16 @@ try {
   require("node:dns").setDefaultResultOrder("ipv4first");
 } catch (_) {}
 
+/** Corporate SSL inspection: Node's Mozilla CA bundle fails Cursor TLS (UNABLE_TO_VERIFY_LEAF_SIGNATURE). */
+function withSystemCa(env = process.env) {
+  const next = { ...env };
+  const cur = String(next.NODE_OPTIONS || "");
+  if (!/\b--use-system-ca\b/.test(cur)) {
+    next.NODE_OPTIONS = `${cur} --use-system-ca`.trim();
+  }
+  return next;
+}
+
 let _dataDir = null;
 const _repoRoot = path.join(__dirname, "..");
 const _overlayDir = path.join(_repoRoot, "overlay");
@@ -61,4 +71,5 @@ module.exports = {
   setDataDir,
   getOverlayDir,
   getRepoRoot,
+  withSystemCa,
 };

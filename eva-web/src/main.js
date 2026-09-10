@@ -124,20 +124,12 @@ const composerInner = `
           </div>
           <div class="actions">
             <button class="send" id="send" type="button">Send</button>
-            <button
-              class="apply ${feat.applyWithCursor ? "" : "hidden"}"
-              id="apply"
-              type="button"
-              title="Use Cursor Agent to apply code changes from this chat"
-            >
-              Apply with Cursor
-            </button>
           </div>
         </div>
         <div class="hint" id="modeHint">${
           feat.platform === "android"
             ? "連 PC 上 eva-core（同 Wi‑Fi）。KB → Tavily → LLM。"
-            : "Postgres KB → Tavily miss → save → Ollama. Language follows dropdown."
+            : "Postgres KB → Tavily miss → save → Ollama。每晚 00:00 自動進化。"
         }</div>`;
 
 const app = document.getElementById("app");
@@ -251,7 +243,6 @@ app.innerHTML =
 const responseEl = document.getElementById("response");
 const promptEl = document.getElementById("prompt");
 const sendBtn = document.getElementById("send");
-const applyBtn = document.getElementById("apply");
 const attachBtn = document.getElementById("attachBtn");
 const chatFileEl = document.getElementById("chatFile");
 const fileChipEl = document.getElementById("fileChip");
@@ -488,7 +479,8 @@ function contextForModel() {
       return (
         !c.startsWith("Applying with Cursor") &&
         !c.startsWith("Cursor apply result:") &&
-        !c.startsWith("Cursor apply failed:")
+        !c.startsWith("Cursor apply failed:") &&
+        !c.startsWith("自動進化")
       );
     })
     .slice(-MAX_CONTEXT_TURNS);
@@ -723,11 +715,11 @@ function hintForMode(mode) {
   if (mode === "tencent") {
     return feat.platform === "android"
       ? "騰訊雲模式：PC 先查本地 KB，再轉發 ADP。可撳 📎 揀檔再問。"
-      : "騰訊雲 ADP 串流對答；可撳 📎 揀檔再問。事實題會先查本地 KB。Clear 會開新 ConversationId。";
+      : "騰訊雲 ADP。對話可用 📎。Clear 開新 ConversationId。每晚 00:00 自動進化。";
   }
   return feat.platform === "android"
     ? "連 PC 上 eva-core（同 Wi‑Fi）。KB → Tavily → LLM。"
-    : "Postgres KB → Tavily miss → save → Ollama. Language follows dropdown.";
+    : "Postgres KB → Tavily miss → save → Ollama。每晚 00:00 自動進化（騰訊雲方案 + Cursor）。";
 }
 
 function applyChatMode(mode) {
@@ -901,61 +893,6 @@ promptEl.addEventListener("keydown", (e) => {
   }
 });
 
-applyBtn?.addEventListener("click", async () => {
-  if (!feat.applyWithCursor) return;
-  if (!history.length) {
-    alert("Chat with Eva first, then click Apply with Cursor.");
-    return;
-  }
-  if (chatBusy) return;
-  const ok = confirm(
-    "Apply code changes with Cursor Agent using this chat?\n\nThis can edit files in the project.",
-  );
-  if (!ok) return;
-
-  chatBusy = true;
-  setSettingsLocked(true);
-  applyBtn.disabled = true;
-  setComposerBusy(true);
-  setMood("thinking");
-  history.push({
-    role: "assistant",
-    content: "Applying with Cursor Agent…",
-    ts: nowTs(),
-  });
-  await persist();
-  renderChat({ scrollToBottom: true });
-
-  try {
-    const result = await window.companion.applyWithCursor(history);
-    history.pop();
-    history.push({
-      role: "assistant",
-      content: "Cursor apply result:\n" + result,
-      ts: nowTs(),
-    });
-    await persist();
-    renderChat({ scrollToBottom: true });
-    setMood("happy", 1200);
-  } catch (err) {
-    history.pop();
-    history.push({
-      role: "assistant",
-      content: "Cursor apply failed:\n" + String(err?.message || err),
-      ts: nowTs(),
-    });
-    await persist();
-    renderChat({ scrollToBottom: true });
-    setMood("confused", 1800);
-  } finally {
-    chatBusy = false;
-    setSettingsLocked(false);
-    applyBtn.disabled = false;
-    setComposerBusy(false);
-    promptEl.focus();
-  }
-});
-
 async function bootstrapChat() {
   try {
     const prefs = await api.loadPrefs();
@@ -964,7 +901,15 @@ async function bootstrapChat() {
   } catch (err) {
     console.warn("load prefs failed", err);
   }
-  await pullHistoryFromServer({ scrollToBottom: true });
+  const ok = await pullHistoryFromServer({ scrollToBottom: true });
+  if (!ok && !responseEl.querySelector(".msg")) {
+    renderChat({ force: true });
+    if (!history.length) {
+      responseEl.classList.add("muted");
+      responseEl.textContent =
+        "載入傾偈紀錄失敗。請確認 Eva API 開住，或者喺 tray 揀 Quit 之後再開。";
+    }
+  }
 }
 
 (async () => {

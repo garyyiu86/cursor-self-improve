@@ -161,8 +161,7 @@
         border-color: #6366f1;
       }
 
-      button.send,
-      button.apply {
+      button.send {
         width: 88px;
         border: 0;
         border-radius: 10px;
@@ -171,19 +170,11 @@
         cursor: pointer;
         padding: 8px 6px;
         font-size: 12px;
-      }
-
-      button.send {
         background: #4f46e5;
         flex: 1;
       }
 
-      button.apply {
-        background: #0f766e;
-      }
-
-      button.send:disabled,
-      button.apply:disabled {
+      button.send:disabled {
         opacity: 0.55;
         cursor: default;
       }
@@ -434,14 +425,6 @@
           <textarea id="prompt" placeholder="Talk to Eva..."></textarea>
           <div class="actions">
             <button class="send" id="send" type="button">Send</button>
-            <button
-              class="apply"
-              id="apply"
-              type="button"
-              title="Use Cursor Agent to apply code changes from this chat"
-            >
-              Apply with Cursor
-            </button>
           </div>
         </div>
         <div class="hint">Postgres KB → Tavily miss → save → Ollama. Language follows dropdown.</div>
@@ -468,7 +451,6 @@
       const responseEl = document.getElementById("response");
       const promptEl = document.getElementById("prompt");
       const sendBtn = document.getElementById("send");
-      const applyBtn = document.getElementById("apply");
       const clearBtn = document.getElementById("clear");
       const langEl = document.getElementById("lang");
       const mascot = document.getElementById("mascot");
@@ -784,55 +766,6 @@
         if (e.key === "Enter" && !e.shiftKey) {
           e.preventDefault();
           send();
-        }
-      });
-
-      applyBtn.addEventListener("click", async () => {
-        if (!history.length) {
-          alert("Chat with Eva first, then click Apply with Cursor.");
-          return;
-        }
-        const ok = confirm(
-          "Apply code changes with Cursor Agent using this chat?\n\nThis can edit files in the project.",
-        );
-        if (!ok) return;
-
-        applyBtn.disabled = true;
-        sendBtn.disabled = true;
-        setMood("thinking");
-        history.push({
-          role: "assistant",
-          content: "Applying with Cursor Agent…",
-          ts: nowTs(),
-        });
-        await persist();
-        renderChat();
-
-        try {
-          const result = await window.companion.applyWithCursor(history);
-          history.pop();
-          history.push({
-            role: "assistant",
-            content: "Cursor apply result:\n" + result,
-            ts: nowTs(),
-          });
-          await persist();
-          renderChat();
-          setMood("happy", 1200);
-        } catch (err) {
-          history.pop();
-          history.push({
-            role: "assistant",
-            content: "Cursor apply failed:\n" + String(err?.message || err),
-            ts: nowTs(),
-          });
-          await persist();
-          renderChat();
-          setMood("confused", 1800);
-        } finally {
-          applyBtn.disabled = false;
-          sendBtn.disabled = false;
-          promptEl.focus();
         }
       });
 

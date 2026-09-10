@@ -7,11 +7,23 @@ const defaults = {
 
 export function loadConnection() {
   const injected = window.__EVA_CONNECTION__;
+  const platform = String(window.__EVA_PLATFORM__ || "").toLowerCase();
   let stored = null;
   try {
     stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
   } catch {
     stored = null;
+  }
+
+  // Overlay injects the embedded API. Stale localStorage tokens from an old
+  // session would 401 forever and leave the UI on "Loading chat history…".
+  if (platform === "desktop" && injected?.baseUrl) {
+    return {
+      baseUrl: String(injected.baseUrl)
+        .trim()
+        .replace(/\/$/, ""),
+      token: String(injected.token || "").trim(),
+    };
   }
 
   const baseUrl = String(

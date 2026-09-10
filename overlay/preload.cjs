@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld("companion", {
   // Shared eva-web uses HTTP API; legacy overlay/app.html still uses IPC below.
   askChat: (history, extra) => ipcRenderer.invoke("ask-chat", history, extra || {}),
   applyWithCursor: (history) => ipcRenderer.invoke("apply-with-cursor", history),
+  evolveWithCursor: (history) => ipcRenderer.invoke("evolve-with-cursor", history),
   askCopilot: (prompt) => ipcRenderer.invoke("ask-copilot", prompt),
   loadChatHistory: () => ipcRenderer.invoke("load-chat-history"),
   saveChatHistory: (history) => ipcRenderer.invoke("save-chat-history", history),

@@ -12,6 +12,17 @@ function apiUrl(path) {
   return `${baseUrl}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
+function timeoutSignal(ms) {
+  if (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function") {
+    return AbortSignal.timeout(ms);
+  }
+  const ctrl = new AbortController();
+  setTimeout(() => ctrl.abort(), ms);
+  return ctrl.signal;
+}
+
+const QUICK_MS = 8000;
+
 export function mediaUrl(raw) {
   const href = String(raw || "").trim();
   if (!/^https?:\/\//i.test(href)) return href;
@@ -44,12 +55,16 @@ async function parseJson(res) {
 export async function healthCheck() {
   const res = await fetch(apiUrl("/api/health"), {
     headers: authHeaders(),
+    signal: timeoutSignal(QUICK_MS),
   });
   return parseJson(res);
 }
 
 export async function loadPrefs() {
-  const res = await fetch(apiUrl("/api/prefs"), { headers: authHeaders() });
+  const res = await fetch(apiUrl("/api/prefs"), {
+    headers: authHeaders(),
+    signal: timeoutSignal(QUICK_MS),
+  });
   return parseJson(res);
 }
 
@@ -63,7 +78,10 @@ export async function savePrefs(patch) {
 }
 
 export async function loadChatHistory() {
-  const res = await fetch(apiUrl("/api/history"), { headers: authHeaders() });
+  const res = await fetch(apiUrl("/api/history"), {
+    headers: authHeaders(),
+    signal: timeoutSignal(QUICK_MS),
+  });
   return parseJson(res);
 }
 

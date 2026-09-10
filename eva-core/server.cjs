@@ -293,12 +293,10 @@ if (require.main === module) {
   eva.loadEnvFile(repoRoot);
   eva.setDataDir(overlayData);
   (async () => {
-    try {
-      await eva.initKnowledgeDb();
-    } catch (err) {
-      console.warn("[Eva][KB] init skipped:", err?.message || err);
-    }
     await startServer();
+    eva.initKnowledgeDb().catch((err) => {
+      console.warn("[Eva][KB] init skipped:", err?.message || err);
+    });
     eva.warmLlmModel().catch(() => {});
   })().catch((err) => {
     console.error("[Eva][API] Failed to start:", err?.message || err);

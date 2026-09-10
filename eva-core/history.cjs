@@ -45,7 +45,8 @@ function resolveHistoryForModel(incoming) {
         return (
           !c.startsWith("Applying with Cursor") &&
           !c.startsWith("Cursor apply result:") &&
-          !c.startsWith("Cursor apply failed:")
+          !c.startsWith("Cursor apply failed:") &&
+          !c.startsWith("自動進化")
         );
       })
       .map((m) => ({

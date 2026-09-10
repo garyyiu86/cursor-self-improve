@@ -85,6 +85,7 @@ function getPool() {
       connectionString: url,
       max: 4,
       idleTimeoutMillis: 30_000,
+      connectionTimeoutMillis: 4_000,
     });
     pool.on("error", (err) => {
       console.warn("[Eva][KB] Postgres pool error:", err?.message || err);

@@ -4,7 +4,7 @@ Shared architecture:
 
 - **`eva-core`** — ask pipeline + HTTP/SSE API on `:8787`
 - **`eva-web`** — Vite chat UI (PC + Android)
-- **`overlay/`** — Electron shell (mascot, tray, drag, Apply with Cursor)
+- **`overlay/`** — Electron shell (mascot, tray, drag; nightly auto-evolve)
 - **`eva-mobile/`** — Capacitor Android APK
 
 ```
@@ -15,6 +15,30 @@ Electron / Android APK
 ```
 
 UI 右上角可切 **Eva** / **騰訊雲**。騰訊雲模式會把最新一句 user 訊息送到 `https://wss.lke.tencentcloud.com/adp/v2/chat`，並每次帶上 Eva 人設（`SystemRole`）。事實題會先查本地 Postgres KB（miss 再 Tavily），把命中資料一併塞進 `SystemRole` 畀 ADP。ConversationId 由本機持久化；Clear 會開新會話。
+
+### 自動進化（騰訊雲想 → Cursor 改）
+
+Chatbox **冇** Apply / 自動進化掣。進化改為 **每晚 00:00** Windows 排程跑（`EvaNightlyEvolve`），唔使開 overlay。
+
+每輪可以係一個完整改進（幾個相關檔、必要時開新檔），預設最多 **4** 輪。唔會 commit；唔准改 `.env`、`overlay/data`、`sample/`、secrets。
+
+完成紀錄寫入：
+
+- `overlay/data/evolve-log.md` — 騰訊原文／指定檔、Cursor 任務、實現唔到原因、diff
+- `overlay/data/evolve-log.json` — 同樣資料（機器讀；diff 正文只留 md）
+- `overlay/data/evolve-nightly-logs/` — 每晚排程 stdout
+
+```bash
+npm run eva:evolve
+npm run eva:evolve -- --rounds 4
+npm run eva:nightly-evolve          # 同排程一樣嘅腳本，即刻試跑
+npm run eva:schedule-evolve         # 註冊每晚 00:00
+# npm run eva:schedule-evolve -- -Unregister
+```
+
+需要 `.env` 裏同時有 `TENCENT_LKE_APP_KEY` 同 `CURSOR_API_KEY`。Node 連 Cursor 若出現 `UNABLE_TO_VERIFY_LEAF_SIGNATURE`（公司 SSL 掃描），要用系統 CA：`overlay` / `eva:evolve` / `eva:cursor-smoke` 已加 `--use-system-ca`。測 API：`npm run eva:cursor-smoke -- --api-only`。**午夜請唔好喺同一個 repo 開住 Agent 對話**，否則 Cursor 執行器會排隊／冇進度。
+
+Cursor 改 code 用 **本地 SDK 執行器**，同 Cursor IDE 裏面嘅 Agent 對話共用。**只開 IDE 睇檔／手打 code 唔會阻。** 失敗唔會再盲試三輪。可調 `EVA_EVOLVE_CURSOR_GRACE_MS`；唔好隨便開 `EVA_EVOLVE_CURSOR_FORCE=1`（會踢走而家呢個對話）。午夜 PC 要開機（或之後醒返：`StartWhenAvailable`）。想嘗試由睡眠喚醒：`npm run eva:schedule-evolve -- -WakeToRun`。
 
 `.env` 需要：
 
@@ -212,6 +236,9 @@ Invoke-RestMethod -Headers @{ Authorization = "Bearer $token" } http://127.0.0.1
 | `npm run eva:web:build` | Build shared UI → `eva-web/dist` |
 | `npm run eva:web:dev` | Vite dev server |
 | `npm run overlay` | Electron + embedded API + eva-web |
+| `npm run eva:evolve` | 騰訊雲出方案 → Cursor 落地（每輪可多數個檔，預設 4 輪） |
+| `npm run eva:nightly-evolve` | 即刻跑同午夜排程一樣嘅大型進化 |
+| `npm run eva:schedule-evolve` | 註冊／取消每晚 **00:00** 進化排程 |
 | `npm run eva:mobile:sync` | Build web + Capacitor sync |
 | `npm run eva:mobile:open` | Open Android Studio project |
 | `npm run eva:tunnel` | Cloudflare quick tunnel → local `:8787` |

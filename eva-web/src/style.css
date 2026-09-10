@@ -4,10 +4,9 @@
   --text: #1f2937;
   --muted: #64748b;
   --soft: #94a3b8;
-  --you: #4f46e5;
+  --you: #6366f1;
   --eva: #db2777;
-  --send: #4f46e5;
-  --apply: #0f766e;
+  --send: #6366f1;
   --eva-font-scale: 1;
   --eva-font-size: calc(13px * var(--eva-font-scale));
 }
@@ -525,8 +524,7 @@ textarea {
   user-select: text;
 }
 
-button.send,
-button.apply {
+button.send {
   width: 88px;
   border: 0;
   border-radius: 10px;
@@ -535,19 +533,11 @@ button.apply {
   cursor: pointer;
   padding: 8px 6px;
   font-size: 12px;
-}
-
-button.send {
   background: var(--send);
   flex: 1;
 }
 
-button.apply {
-  background: var(--apply);
-}
-
-button.send:disabled,
-button.apply:disabled {
+button.send:disabled {
   opacity: 0.55;
   cursor: default;
 }
