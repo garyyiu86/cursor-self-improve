@@ -1,0 +1,282 @@
+/* Inline training plan card (replaces bicep-weekly-plan.html iframe) */
+.msg-body .training-plan-card {
+  width: 100%;
+  max-width: 100%;
+  margin: 8px 0 4px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--eva-pink-border);
+  background: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.96) 0%,
+    var(--eva-pink-soft) 55%,
+    var(--eva-silver-soft) 100%
+  );
+  box-shadow: 0 2px 10px rgba(255, 183, 197, 0.18);
+}
+
+.tpc-progress {
+  margin-bottom: 10px;
+}
+
+.tpc-progress-label {
+  margin-bottom: 4px;
+  font-size: 0.82em;
+  font-weight: 650;
+  color: #4a1f2e;
+}
+
+.tpc-progress-track {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.65);
+  border: 1px solid var(--eva-silver-border);
+  overflow: hidden;
+}
+
+.tpc-progress-fill {
+  height: 100%;
+  width: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--eva-pink) 0%, #f472b6 100%);
+  transition: width 0.25s ease;
+}
+
+.tpc-progress[aria-valuenow="0"] .tpc-progress-fill {
+  min-width: 0;
+}
+
+.tpc-progress:not([aria-valuenow="0"]) .tpc-progress-fill {
+  min-width: 4px;
+}
+
+.tpc-progress--complete .tpc-progress-fill {
+  background: linear-gradient(90deg, #22c55e 0%, #86efac 100%);
+}
+
+.tpc-progress--complete .tpc-progress-label {
+  color: #166534;
+}
+
+.tpc-header {
+  margin-bottom: 8px;
+}
+
+.tpc-title {
+  margin: 0 0 2px;
+  font-size: 1.05em;
+  font-weight: 700;
+  color: #4a1f2e;
+}
+
+.tpc-subtitle {
+  margin: 0;
+  font-size: 0.88em;
+  color: var(--muted);
+}
+
+.tpc-day + .tpc-day {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--eva-silver-border);
+}
+
+.tpc-day-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0 0 4px;
+  font-size: 0.95em;
+  font-weight: 650;
+  line-height: 1.35;
+  color: #334155;
+}
+
+.tpc-day-heading-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.tpc-day-badge {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.78em;
+  font-weight: 650;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.tpc-day-badge--partial {
+  color: #64748b;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--eva-silver-border);
+}
+
+.tpc-day-badge--complete {
+  color: #166534;
+  background: rgba(220, 252, 231, 0.95);
+  border: 1px solid #86efac;
+}
+
+.tpc-day-meta {
+  margin: 0 0 6px;
+  font-size: 0.82em;
+  color: var(--muted);
+}
+
+.tpc-table-wrap {
+  overflow-x: auto;
+  max-width: 100%;
+  -webkit-overflow-scrolling: touch;
+}
+
+.tpc-table {
+  border-collapse: collapse;
+  width: max-content;
+  min-width: 100%;
+  font-size: 0.84em;
+  line-height: 1.35;
+}
+
+.tpc-table th,
+.tpc-table td {
+  border: 1px solid #cbd5e1;
+  padding: 4px 6px;
+  vertical-align: top;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.tpc-table th {
+  background: #e2e8f0;
+  font-weight: 650;
+  color: #334155;
+}
+
+.tpc-table tbody tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.tpc-ex-row {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tpc-ex-row:focus-visible {
+  outline: 2px solid var(--eva-pink);
+  outline-offset: -2px;
+}
+
+.tpc-ex-row:active:not(.tpc-ex-done) {
+  background: rgba(255, 183, 197, 0.22);
+}
+
+.tpc-ex-check {
+  width: 2em;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.tpc-checkbox {
+  width: 1.15em;
+  height: 1.15em;
+  margin: 0;
+  accent-color: var(--eva-pink);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.tpc-ex-name {
+  font-weight: 600;
+  min-width: 8em;
+}
+
+.tpc-ex-name-text {
+  display: block;
+}
+
+.tpc-ex-tip-inline {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.92em;
+  font-weight: 400;
+  color: #64748b;
+}
+
+.tpc-ex-sets,
+.tpc-ex-reps {
+  text-align: center;
+  white-space: nowrap;
+}
+
+.tpc-table tbody tr.tpc-ex-done td {
+  opacity: 0.72;
+}
+
+.tpc-table tbody tr.tpc-ex-done .tpc-ex-name-text,
+.tpc-table tbody tr.tpc-ex-done .tpc-ex-sets,
+.tpc-table tbody tr.tpc-ex-done .tpc-ex-reps {
+  text-decoration: line-through;
+}
+
+.tpc-reminders {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--eva-silver-border);
+}
+
+.tpc-reminders-heading {
+  margin: 0 0 4px;
+  font-size: 0.9em;
+  font-weight: 650;
+}
+
+.tpc-reminders-list {
+  margin: 0;
+  padding-left: 1.2em;
+  font-size: 0.86em;
+  color: #475569;
+}
+
+.tpc-reminders-list li {
+  margin: 2px 0;
+}
+
+.tpc-reset-wrap {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--eva-silver-border);
+  text-align: center;
+}
+
+.tpc-reset-btn {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 0.8em;
+  color: #94a3b8;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.tpc-reset-btn:hover {
+  color: #64748b;
+}
+
+.tpc-reset-btn:focus-visible {
+  outline: 2px solid var(--eva-pink);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.tpc-footer {
+  margin-top: 8px;
+  font-size: 0.82em;
+  color: var(--muted);
+  text-align: right;
+}

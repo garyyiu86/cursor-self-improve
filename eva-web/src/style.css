@@ -4,9 +4,23 @@
   --text: #1f2937;
   --muted: #64748b;
   --soft: #94a3b8;
-  --you: #6366f1;
-  --eva: #db2777;
-  --send: #6366f1;
+  --composer-hint: #334155;
+  /* Eva 偶像品牌色：星光銀 + 櫻粉 */
+  --eva-silver: #c0c0c0;
+  --eva-pink: #ffb7c5;
+  --eva-silver-soft: rgba(192, 192, 192, 0.22);
+  --eva-pink-soft: rgba(255, 183, 197, 0.26);
+  --eva-silver-border: rgba(192, 192, 192, 0.45);
+  --eva-pink-border: rgba(255, 183, 197, 0.42);
+  --eva-silver-glow: rgba(192, 192, 192, 0.55);
+  --eva-pink-glow: rgba(255, 183, 197, 0.55);
+  --you: #8a9099;
+  --eva: #e88fa0;
+  --send: #e88fa0;
+  --reo-silver: var(--eva-silver);
+  --reo-pink: var(--eva-pink);
+  --reo-silver-glow: var(--eva-silver-glow);
+  --reo-pink-glow: var(--eva-pink-glow);
   --eva-font-scale: 1;
   --eva-font-size: calc(13px * var(--eva-font-scale));
 }
@@ -24,11 +38,47 @@ body {
   user-select: none;
 }
 
+html.platform-desktop,
 body.platform-desktop {
   width: 500px;
   height: 420px;
   overflow: hidden;
-  background: transparent;
+  background: #f8fafc;
+}
+
+body.platform-desktop #app,
+body.platform-desktop .eva-chat-page {
+  width: 500px;
+  height: 420px;
+  min-height: 420px;
+  flex: none;
+}
+
+body.platform-desktop .eva-chat-page {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+body.platform-desktop .eva-chat-host {
+  width: 500px;
+  height: 420px;
+  min-height: 420px;
+  flex: none;
+}
+
+body.platform-desktop .tw-panel,
+body.platform-desktop .ex-library,
+body.platform-desktop .workout-link,
+body.platform-desktop .wk-plan-footer {
+  display: none !important;
+}
+
+.eva-chat-fallback {
+  padding: 16px;
+  color: #9d174d;
+  background: #fff;
+  font-size: 13px;
 }
 
 /* Fill WebView; adjustResize + JS sets --app-height / inline height when keyboard opens */
@@ -53,6 +103,32 @@ body.platform-android #app {
   flex-direction: column;
   overflow: hidden;
   box-sizing: border-box;
+}
+
+#app {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.workout-link {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--eva-pink-border);
+  background: var(--eva-pink-soft);
+  color: #9d174d;
+  font-size: 0.82em;
+  font-weight: 650;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.workout-link:hover {
+  background: rgba(255, 183, 197, 0.45);
 }
 
 body.platform-android .layout {
@@ -111,6 +187,11 @@ body.platform-android .composer {
   padding-bottom: max(6px, env(safe-area-inset-bottom, 0px));
 }
 
+body.platform-android .composer .composer-kbd-hint {
+  margin-top: 2px;
+  margin-bottom: 0;
+}
+
 body.platform-android .composer .hint {
   margin-top: 4px;
   margin-bottom: 0;
@@ -149,14 +230,56 @@ body.platform-desktop .panel {
   height: 420px;
   border-radius: 16px 0 0 16px;
   border-right: 0;
+  background: #ffffff;
+  opacity: 1;
+  isolation: isolate;
+  transform: translateZ(0);
+  z-index: 2;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
 }
 
-.top {
+.top,
+.chat-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+}
+
+/* 聊天 header：星光銀 → 櫻粉漸層底線 + 標題點綴 */
+.chat-header {
+  position: relative;
+  padding-bottom: 8px;
+  margin-bottom: -2px;
+}
+
+.chat-header::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--eva-silver) 0%, var(--eva-pink) 100%);
+  opacity: 0.72;
+}
+
+.chat-header h1 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  letter-spacing: 0.02em;
+}
+
+.chat-header h1::before {
+  content: "";
+  flex-shrink: 0;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--eva-silver) 0%, var(--eva-pink) 100%);
+  box-shadow: 0 0 8px var(--eva-pink-glow);
 }
 
 body.platform-desktop .top {
@@ -210,9 +333,16 @@ h1 {
 .response {
   flex: 1;
   overflow: auto;
+  overflow-anchor: none;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   padding: 10px;
   border-radius: 12px;
-  background: #f8fafc;
+  background: linear-gradient(180deg, #fafbfc 0%, #f8fafc 100%);
   border: 1px solid var(--panel-border);
   white-space: pre-wrap;
   word-break: break-word;
@@ -223,16 +353,63 @@ h1 {
 }
 
 .response.muted {
+  display: block;
   color: var(--muted);
 }
 
 .msg {
+  display: flex;
+  flex-direction: column;
+  max-width: 92%;
   margin: 0 0 10px;
   white-space: normal;
 }
 
+.msg.you {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+
+.msg.eva {
+  align-self: flex-start;
+  align-items: flex-start;
+}
+
+/* 新訊息淡入：約 0.3s，輕微上移 + opacity */
+@keyframes msg-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.msg.msg-enter {
+  animation: msg-enter 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 .msg-body {
   white-space: normal;
+  padding: 8px 12px;
+  border-radius: 14px;
+  line-height: 1.45;
+}
+
+.msg.eva .msg-body {
+  background: linear-gradient(145deg, var(--eva-pink-soft) 0%, rgba(255, 255, 255, 0.55) 100%);
+  border: 1px solid var(--eva-pink-border);
+  border-bottom-left-radius: 5px;
+  box-shadow: 0 1px 6px rgba(255, 183, 197, 0.12);
+}
+
+.msg.you .msg-body {
+  background: linear-gradient(145deg, var(--eva-silver-soft) 0%, rgba(255, 255, 255, 0.6) 100%);
+  border: 1px solid var(--eva-silver-border);
+  border-bottom-right-radius: 5px;
+  box-shadow: 0 1px 6px rgba(192, 192, 192, 0.14);
 }
 
 .msg-body .md-text {
@@ -240,36 +417,62 @@ h1 {
   word-break: break-word;
 }
 
+.msg-body .md-media {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 8px 0 4px;
+}
+
 .msg-body .md-img {
   max-width: min(100%, 280px);
   height: auto;
   border-radius: 10px;
   display: block;
-  margin: 8px 0 4px;
+}
+
+.msg-body .md-video {
+  width: 100%;
+  max-width: 100%;
+  max-height: 280px;
+  border-radius: 10px;
+  background: #111;
+  display: block;
 }
 
 .msg-body .md-embed-wrap {
-  overflow: hidden;
-  max-width: 300px;
+  overflow: visible;
+  width: 100%;
+  max-width: 100%;
 }
 
 .msg-body .md-embed {
   width: 100%;
-  max-width: 300px;
-  height: 280px;
-  border: 0;
+  max-width: 100%;
+  height: 360px;
+  border: 1px solid var(--eva-silver-border);
   border-radius: 10px;
   display: block;
-  margin: 8px 0 4px;
-  background: #0f172a;
-  overflow: hidden;
-  scrollbar-width: none;
+  margin: 0;
+  background: #fff;
+  overflow: auto;
 }
 
-.msg-body .md-embed::-webkit-scrollbar {
-  width: 0;
-  height: 0;
-  display: none;
+.msg-body .md-media-dl {
+  border: 0;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  color: #4a1f2e;
+  background: linear-gradient(135deg, #ffb7c5, #f8c8d4);
+}
+
+.msg-body .md-media-dl:disabled {
+  opacity: 0.65;
+  cursor: wait;
 }
 
 .msg-body .md-h {
@@ -390,6 +593,37 @@ h1 {
   margin-bottom: 2px;
 }
 
+.msg .meta-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.msg-regenerate {
+  flex: 0 0 auto;
+  border: none;
+  background: transparent;
+  color: var(--soft);
+  font-size: 0.95em;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 6px;
+  cursor: pointer;
+  opacity: 0.75;
+}
+
+.msg-regenerate:hover:not(:disabled) {
+  color: #d97a8e;
+  background: rgba(217, 122, 142, 0.12);
+  opacity: 1;
+}
+
+.msg-regenerate:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
 .msg .who {
   font-size: 0.85em;
   font-weight: 650;
@@ -403,11 +637,87 @@ h1 {
 }
 
 .msg.you .who {
-  color: var(--you);
+  color: #7a808a;
 }
 
 .msg.eva .who {
-  color: var(--eva);
+  color: #d97a8e;
+}
+
+/* 星野玲應援色打字中指示器（星光銀＋櫻粉） */
+.msg.typing-indicator .msg-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-height: 1.6em;
+}
+
+.typing-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 14px;
+  border-radius: 16px 16px 16px 6px;
+  background: linear-gradient(135deg, var(--eva-silver-soft) 0%, var(--eva-pink-soft) 100%);
+  border: 1px solid var(--eva-silver-border);
+  box-shadow:
+    0 0 12px var(--eva-silver-glow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.65);
+}
+
+.typing-dots span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  animation: typing-bounce 1.15s ease-in-out infinite;
+}
+
+.typing-dots span:nth-child(1) {
+  background: var(--eva-silver);
+  box-shadow: 0 0 6px var(--eva-silver-glow);
+  animation-delay: 0s;
+}
+
+.typing-dots span:nth-child(2) {
+  background: var(--eva-pink);
+  box-shadow: 0 0 6px var(--eva-pink-glow);
+  animation-delay: 0.18s;
+}
+
+.typing-dots span:nth-child(3) {
+  background: var(--eva-silver);
+  box-shadow: 0 0 6px var(--eva-silver-glow);
+  animation-delay: 0.36s;
+}
+
+@keyframes typing-bounce {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0) scale(1);
+    opacity: 0.55;
+  }
+  30% {
+    transform: translateY(-5px) scale(1.12);
+    opacity: 1;
+  }
+}
+
+.typing-status {
+  font-size: 0.82em;
+  color: var(--soft);
+  padding-left: 2px;
+}
+
+.typing-stream.hidden,
+.typing-dots.hidden,
+.typing-status.hidden {
+  display: none;
+}
+
+.msg.streaming .msg-body {
+  min-height: 0;
 }
 
 .row {
@@ -429,7 +739,8 @@ h1 {
 }
 
 .prompt-box:focus-within {
-  border-color: #6366f1;
+  border-color: var(--eva-pink);
+  box-shadow: 0 0 0 2px rgba(255, 183, 197, 0.22);
 }
 
 .prompt-main {
@@ -528,12 +839,13 @@ button.send {
   width: 88px;
   border: 0;
   border-radius: 10px;
-  color: white;
+  color: #4a3d42;
   font-weight: 600;
   cursor: pointer;
   padding: 8px 6px;
   font-size: 12px;
-  background: var(--send);
+  background: linear-gradient(135deg, var(--eva-silver) 0%, var(--eva-pink) 100%);
+  box-shadow: 0 2px 8px rgba(255, 183, 197, 0.28);
   flex: 1;
 }
 
@@ -542,9 +854,18 @@ button.send:disabled {
   cursor: default;
 }
 
+.composer-kbd-hint {
+  margin-top: 3px;
+  font-size: 0.78em;
+  line-height: 1.25;
+  color: var(--composer-hint);
+  text-align: right;
+  user-select: none;
+}
+
 .hint {
   font-size: 0.85em;
-  color: var(--soft);
+  color: var(--composer-hint);
 }
 
 .mascot {
@@ -760,10 +1081,16 @@ button.send:disabled {
 
 @media (prefers-reduced-motion: reduce) {
   .mascot img,
-  .mascot::after {
+  .mascot::after,
+  .msg.msg-enter,
+  .typing-dots span {
     animation: none !important;
     transition: none !important;
     filter: none !important;
+  }
+
+  .typing-dots span {
+    opacity: 0.85;
   }
 }
 

@@ -1,5 +1,5 @@
 require("../eva-core/log.cjs");
-const { app, BrowserWindow, screen, Menu, Tray, nativeImage, ipcMain } = require("electron");
+const { app, BrowserWindow, screen, Menu, Tray, nativeImage, ipcMain, shell, powerMonitor } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
 const crypto = require("node:crypto");
@@ -62,8 +62,102 @@ if (!gotSingleInstanceLock) {
   app.exit(0);
 }
 
-function focusEvaWindow() {
+function positionOnWorkArea(workArea) {
+  return {
+    x: Math.round(workArea.x + workArea.width - WINDOW_WIDTH - MARGIN),
+    y: Math.round(workArea.y + workArea.height - WINDOW_HEIGHT - MARGIN),
+    width: WINDOW_WIDTH,
+    height: WINDOW_HEIGHT,
+  };
+}
+
+function isBoundsOnDisplay(bounds, display) {
+  const cx = bounds.x + Math.floor(bounds.width / 2);
+  const cy = bounds.y + Math.floor(bounds.height / 2);
+  const b = display.bounds;
+  return cx >= b.x && cy >= b.y && cx < b.x + b.width && cy < b.y + b.height;
+}
+
+function snapWindowTo(bounds) {
   if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.setBounds({
+    x: bounds.x,
+    y: bounds.y,
+    width: WINDOW_WIDTH,
+    height: WINDOW_HEIGHT,
+  });
+  saveWindowBounds();
+}
+
+const UI_STALE_MS = 10 * 60 * 1000;
+let lastUiLoadAt = 0;
+let reloadingUi = false;
+
+function loadEvaWeb(win) {
+  const devUrl = String(process.env.EVA_WEB_URL || "").trim();
+  if (devUrl) {
+    console.log("[Eva] Loading eva-web from EVA_WEB_URL:", devUrl);
+    win.loadURL(devUrl);
+  } else {
+    const distIndex = evaWebDistIndex();
+    if (fs.existsSync(distIndex)) {
+      console.log("[Eva] Loading eva-web dist:", distIndex);
+      win.loadFile(distIndex);
+    } else {
+      const legacy = path.join(__dirname, "app.html");
+      console.warn(
+        "[Eva] eva-web/dist missing — run `npm run eva:web:build`. Falling back to overlay/app.html",
+      );
+      win.loadFile(legacy);
+    }
+  }
+  lastUiLoadAt = Date.now();
+}
+
+function reloadOverlayUi(reason) {
+  if (!mainWindow || mainWindow.isDestroyed() || reloadingUi) return;
+  reloadingUi = true;
+  console.log("[Eva] Reloading overlay UI:", reason);
+  try {
+    loadEvaWeb(mainWindow);
+  } finally {
+    setTimeout(() => {
+      reloadingUi = false;
+    }, 1500);
+  }
+}
+
+async function overlayChatMissing() {
+  if (!mainWindow || mainWindow.isDestroyed()) return true;
+  try {
+    return await mainWindow.webContents.executeJavaScript(
+      `!(document.querySelector(".panel") || document.querySelector("#response"))`,
+    );
+  } catch {
+    return true;
+  }
+}
+
+async function ensureFreshOverlayUi(reason = "focus") {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const stale = Date.now() - lastUiLoadAt >= UI_STALE_MS;
+  const always = reason === "power-resume" || reason === "unlock-screen";
+  if (!stale && !always) return;
+  const blank = always || (await overlayChatMissing());
+  if (blank) reloadOverlayUi(reason);
+  else lastUiLoadAt = Date.now();
+}
+
+function focusEvaWindow({ recover = false } = {}) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (recover) {
+    const cursorDisplay = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+    const current = mainWindow.getBounds();
+    if (!isBoundsOnDisplay(current, cursorDisplay)) {
+      snapWindowTo(positionOnWorkArea(cursorDisplay.workArea));
+    }
+  }
+  void ensureFreshOverlayUi("focus");
   if (mainWindow.isMinimized()) mainWindow.restore();
   mainWindow.show();
   mainWindow.setAlwaysOnTop(true, "screen-saver");
@@ -73,8 +167,25 @@ function focusEvaWindow() {
 
 app.on("second-instance", () => {
   console.log("[Eva] Second launch detected — focusing existing window.");
-  focusEvaWindow();
+  focusEvaWindow({ recover: true });
 });
+
+function uniqueDownloadPath(filename) {
+  const dir = app.getPath("downloads");
+  const safe =
+    String(filename || "eva-download")
+      .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_")
+      .replace(/[/\\]/g, "_")
+      .trim()
+      .slice(0, 80) || "eva-download";
+  const dest = path.join(dir, safe);
+  if (!fs.existsSync(dest)) return dest;
+  const ext = path.extname(safe);
+  const base = path.basename(safe, ext);
+  let i = 1;
+  while (fs.existsSync(path.join(dir, `${base} (${i})${ext}`))) i += 1;
+  return path.join(dir, `${base} (${i})${ext}`);
+}
 
 function overlayDataDir() {
   const dir = path.join(__dirname, "data");
@@ -86,14 +197,19 @@ function windowBoundsPath() {
   return path.join(overlayDataDir(), "window-bounds.json");
 }
 
+function largestDisplay() {
+  const displays = screen.getAllDisplays();
+  return (
+    [...displays].sort((a, b) => {
+      const aa = a.workArea.width * a.workArea.height;
+      const bb = b.workArea.width * b.workArea.height;
+      return bb - aa;
+    })[0] || screen.getPrimaryDisplay()
+  );
+}
+
 function defaultPosition() {
-  const { workArea } = screen.getPrimaryDisplay();
-  return {
-    x: Math.round(workArea.x + workArea.width - WINDOW_WIDTH - MARGIN),
-    y: Math.round(workArea.y + workArea.height - WINDOW_HEIGHT - MARGIN),
-    width: WINDOW_WIDTH,
-    height: WINDOW_HEIGHT,
-  };
+  return positionOnWorkArea(largestDisplay().workArea);
 }
 
 function isBoundsOnAnyDisplay(bounds) {
@@ -118,7 +234,11 @@ function loadWindowBounds() {
       height: WINDOW_HEIGHT,
     };
     if (![bounds.x, bounds.y].every(Number.isFinite)) return defaultPosition();
-    if (!isBoundsOnAnyDisplay(bounds)) return defaultPosition();
+    const home = largestDisplay();
+    const cursorDisplay = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+    if (!isBoundsOnDisplay(bounds, home) && !isBoundsOnDisplay(bounds, cursorDisplay)) {
+      return positionOnWorkArea(home.workArea);
+    }
     return bounds;
   } catch {
     return defaultPosition();
@@ -156,15 +276,15 @@ function createMainWindow() {
     x: pos.x,
     y: pos.y,
     frame: false,
-    transparent: true,
+    transparent: process.platform !== "win32",
     resizable: false,
     maximizable: false,
     fullscreenable: false,
-    skipTaskbar: true,
+    skipTaskbar: false,
     alwaysOnTop: true,
-    hasShadow: false,
+    hasShadow: true,
     show: false,
-    backgroundColor: "#00000000",
+    backgroundColor: process.platform === "win32" ? "#f8fafc" : "#00000000",
     title: "Eva",
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
@@ -175,11 +295,26 @@ function createMainWindow() {
 
   mainWindow.setAlwaysOnTop(true, "screen-saver");
   mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  mainWindow.webContents.setBackgroundThrottling(false);
+  mainWindow.webContents.on("console-message", (_event, level, message) => {
+    if (level >= 2) console.error("[Eva][renderer]", message);
+  });
+  mainWindow.webContents.on("did-fail-load", (_event, code, desc, url) => {
+    console.error("[Eva] did-fail-load", code, desc, url);
+  });
   loadEvaWeb(mainWindow);
 
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
-  mainWindow.webContents.session.on("will-download", (event) => {
-    event.preventDefault();
+  mainWindow.webContents.session.on("will-download", (_event, item) => {
+    const dest = uniqueDownloadPath(item.getFilename());
+    item.setSavePath(dest);
+    item.once("done", (_e, state) => {
+      if (state === "completed") {
+        try {
+          shell.showItemInFolder(dest);
+        } catch (_) {}
+      }
+    });
   });
 
   mainWindow.once("ready-to-show", () => {
@@ -191,9 +326,19 @@ function createMainWindow() {
       height: WINDOW_HEIGHT,
     });
     mainWindow.show();
-    mainWindow.setSkipTaskbar(true);
+    mainWindow.setSkipTaskbar(false);
     mainWindow.moveTop();
     mainWindow.focus();
+    const b = mainWindow.getBounds();
+    mainWindow.setBounds({ ...b, width: b.width + 1 });
+    mainWindow.setBounds(b);
+  });
+
+  mainWindow.on("show", () => {
+    void ensureFreshOverlayUi("show");
+  });
+  mainWindow.on("focus", () => {
+    void ensureFreshOverlayUi("focus");
   });
 
   mainWindow.on("move", () => scheduleSaveWindowBounds());
@@ -214,27 +359,6 @@ function createMainWindow() {
 
 function evaWebDistIndex() {
   return path.join(__dirname, "..", "eva-web", "dist", "index.html");
-}
-
-function loadEvaWeb(win) {
-  const devUrl = String(process.env.EVA_WEB_URL || "").trim();
-  if (devUrl) {
-    console.log("[Eva] Loading eva-web from EVA_WEB_URL:", devUrl);
-    win.loadURL(devUrl);
-    return;
-  }
-  const distIndex = evaWebDistIndex();
-  if (fs.existsSync(distIndex)) {
-    console.log("[Eva] Loading eva-web dist:", distIndex);
-    win.loadFile(distIndex);
-    return;
-  }
-  // Fallback to legacy overlay HTML while dist is missing
-  const legacy = path.join(__dirname, "app.html");
-  console.warn(
-    "[Eva] eva-web/dist missing — run `npm run eva:web:build`. Falling back to overlay/app.html",
-  );
-  win.loadFile(legacy);
 }
 
 function restartEva(reason = "manual", { force = false } = {}) {
@@ -377,19 +501,27 @@ function createTray() {
   tray.setContextMenu(
     Menu.buildFromTemplate([
       {
-        label: "Show",
+        label: "顯示 Eva",
         click: () => {
           if (!mainWindow || mainWindow.isDestroyed()) createMainWindow();
-          else focusEvaWindow();
+          else focusEvaWindow({ recover: true });
         },
       },
       {
-        label: "Restart Eva",
+        label: "移到大螢幕",
+        click: () => {
+          if (!mainWindow || mainWindow.isDestroyed()) createMainWindow();
+          snapWindowTo(defaultPosition());
+          focusEvaWindow();
+        },
+      },
+      {
+        label: "重新啟動",
         click: () => restartEva("tray", { force: true }),
       },
       { type: "separator" },
       {
-        label: "Quit",
+        label: "退出",
         click: () => {
           allowQuit = true;
           app.quit();
@@ -397,7 +529,7 @@ function createTray() {
       },
     ]),
   );
-  tray.on("double-click", () => focusEvaWindow());
+  tray.on("double-click", () => focusEvaWindow({ recover: true }));
 }
 
 async function applyWithCursor(historyMessages, { onProgress } = {}) {
@@ -544,6 +676,22 @@ app.whenReady().then(async () => {
   createMainWindow();
   createTray();
   watchForUpdates();
+  try {
+    powerMonitor.on("resume", () => {
+      void ensureFreshOverlayUi("power-resume");
+    });
+    powerMonitor.on("unlock-screen", () => {
+      void ensureFreshOverlayUi("unlock-screen");
+    });
+  } catch (err) {
+    console.warn("[Eva] powerMonitor unavailable:", err?.message || err);
+  }
+  setInterval(() => {
+    if (!mainWindow || mainWindow.isDestroyed() || !mainWindow.isVisible()) return;
+    void overlayChatMissing().then((blank) => {
+      if (blank) reloadOverlayUi("blank-check");
+    });
+  }, 120000);
   knowledgeDb.initKnowledgeDb().catch((err) => {
     console.warn("[Eva][KB] init skipped:", err?.message || err);
   });

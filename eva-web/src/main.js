@@ -2,11 +2,24 @@ import "./style.css";
 import * as api from "./api.js";
 import { features } from "./platform.js";
 import { loadConnection, saveConnection, needsSetup } from "./settings.js";
-import { renderMarkdownInto } from "./markdown.js";
+import { createWsSyncClient } from "./ws-sync.js";
+import {
+  historySig,
+  renderChat,
+  appendChatMessage,
+  appendTypingIndicator,
+  attachChatAutoScroll,
+  attachComposerEnterToSend,
+  composerSendShortcutLabel,
+  syncRegenerateButtons,
+} from "./chat-ui.js";
 import { Capacitor } from "@capacitor/core";
 import { Keyboard } from "@capacitor/keyboard";
 
 const feat = features();
+
+/** @param {HTMLElement} [container] Chat mount node (React shell passes a child div). */
+export async function initChat(container) {
 document.documentElement.classList.add(`platform-${feat.platform}`);
 document.body.classList.add(`platform-${feat.platform}`);
 
@@ -104,6 +117,8 @@ const mascotHtml = `
       </div>
     </div>`;
 
+const sendShortcut = composerSendShortcutLabel();
+
 const composerInner = `
         <div class="row">
           <div class="prompt-box">
@@ -113,7 +128,12 @@ const composerInner = `
             </div>
             <div class="prompt-main">
               <button class="attach" id="attachBtn" type="button" title="揀檔再問" aria-label="揀檔再問">+</button>
-              <textarea id="prompt" placeholder="Talk to Eva..."></textarea>
+              <textarea
+                id="prompt"
+                placeholder="Talk to Eva..."
+                title="Enter 送出 · Shift+Enter 換行 · ${sendShortcut} 送出"
+                aria-keyshortcuts="Enter Shift+Enter Control+Enter Meta+Enter"
+              ></textarea>
             </div>
             <input
               type="file"
@@ -123,22 +143,24 @@ const composerInner = `
             />
           </div>
           <div class="actions">
-            <button class="send" id="send" type="button">Send</button>
+            <button class="send" id="send" type="button" title="送出（Enter 或 ${sendShortcut}）">Send</button>
           </div>
         </div>
+        <div class="composer-kbd-hint">Enter 送出 · Shift+Enter 換行 · ${sendShortcut} 送出</div>
         <div class="hint" id="modeHint">${
           feat.platform === "android"
             ? "連 PC 上 eva-core（同 Wi‑Fi）。KB → Tavily → LLM。"
             : "Postgres KB → Tavily miss → save → Ollama。每晚 00:00 自動進化。"
         }</div>`;
 
-const app = document.getElementById("app");
+const app = container || document.getElementById("app");
+if (!app) return;
 app.innerHTML =
   feat.platform === "android"
     ? `
   <div class="layout">
     <div class="panel">
-      <div class="top">
+      <div class="top chat-header">
         <h1>Eva</h1>
         <div class="top-actions">
           <button class="font-btn" id="fontDown" type="button" title="縮小字型">A−</button>
@@ -154,6 +176,11 @@ app.innerHTML =
             <option value="en">EN</option>
             <option value="auto">Auto</option>
           </select>
+          <a class="workout-link" href="#/workout" title="健身訓練計劃">健身</a>
+          <a class="workout-link" href="#/fitness" title="Eva 健身顧問">顧問</a>
+          <a class="workout-link" href="#/mood" title="心情日記">心情</a>
+          <a class="workout-link" href="#/live" title="Live 應援倒數">Live</a>
+          <a class="workout-link" href="#/oshi" title="推し配對分析">配對</a>
           <button class="clear" id="clear" type="button" title="Clear saved chat history">Clear</button>
         </div>
       </div>
@@ -193,7 +220,7 @@ app.innerHTML =
     : `
   <div class="layout">
     <div class="panel">
-      <div class="top">
+      <div class="top chat-header">
         <h1>Eva</h1>
         <div class="top-actions">
           <button class="settings-btn hidden" id="settingsBtn" type="button" title="Connection">設定</button>
@@ -241,6 +268,7 @@ app.innerHTML =
 `;
 
 const responseEl = document.getElementById("response");
+attachChatAutoScroll(responseEl);
 const promptEl = document.getElementById("prompt");
 const sendBtn = document.getElementById("send");
 const attachBtn = document.getElementById("attachBtn");
@@ -332,6 +360,13 @@ let switching = false;
 /** True while ask / apply in flight — lock connection settings & skip history pull overwrite */
 let chatBusy = false;
 let syncTimer = null;
+
+const wsSync = createWsSyncClient({
+  shouldApply: () => !chatBusy && document.visibilityState === "visible",
+  onSync: (loaded) => {
+    void pullHistoryFromServer({ loaded });
+  },
+});
 
 if (feat.mascot) {
   Object.values(EXPR).forEach((src) => {
@@ -440,24 +475,6 @@ function nowTs() {
   return new Date().toISOString();
 }
 
-function formatTs(ts) {
-  if (!ts) return "";
-  try {
-    const d = new Date(ts);
-    if (Number.isNaN(d.getTime())) return String(ts);
-    return d.toLocaleString(undefined, {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    });
-  } catch {
-    return String(ts);
-  }
-}
-
 function trimStored() {
   while (history.length > MAX_STORED) history.shift();
 }
@@ -486,59 +503,44 @@ function contextForModel() {
     .slice(-MAX_CONTEXT_TURNS);
 }
 
-function historySig(list) {
-  return (Array.isArray(list) ? list : [])
-    .map((m) => `${m.role}|${m.ts}|${String(m.content ?? "")}`)
-    .join("\n");
-}
-
 let chatRenderSig = "";
 
-function renderChat({ scrollToBottom = false, preserveScroll = false, force = false } = {}) {
-  const prevTop = responseEl.scrollTop;
-  const sig = historySig(history);
-  const alreadyPainted = history.length
-    ? Boolean(responseEl.querySelector(".msg"))
-    : responseEl.classList.contains("muted");
-  if (!force && sig === chatRenderSig && alreadyPainted) {
-    if (scrollToBottom) responseEl.scrollTop = responseEl.scrollHeight;
-    return;
+function emptyChatText() {
+  return feat.platform === "android"
+    ? "Hi, I'm Eva. 同 PC 嘅 chat history 會同步。\n喺設定填 PC IP + token，然後傾偈。"
+    : "Hi, I'm Eva. Chat history is saved across restarts.\nDrag the title or mascot to move. Type below, then Send.";
+}
+
+function lastAssistantIndex() {
+  for (let i = history.length - 1; i >= 0; i--) {
+    if (history[i]?.role === "assistant") return i;
   }
-  chatRenderSig = sig;
-  if (!history.length) {
-    responseEl.classList.add("muted");
-    responseEl.textContent = feat.platform === "android"
-      ? "Hi, I'm Eva. 同 PC 嘅 chat history 會同步。\n喺設定填 PC IP + token，然後傾偈。"
-      : "Hi, I'm Eva. Chat history is saved across restarts.\nDrag the title or mascot to move. Type below, then Send.";
-    return;
+  return -1;
+}
+
+function hasUserBeforeIndex(index) {
+  for (let i = index - 1; i >= 0; i--) {
+    if (history[i]?.role === "user") return true;
   }
-  responseEl.classList.remove("muted");
-  responseEl.innerHTML = "";
-  for (const m of history) {
-    const div = document.createElement("div");
-    div.className = "msg " + (m.role === "user" ? "you" : "eva");
-    const meta = document.createElement("div");
-    meta.className = "meta";
-    const who = document.createElement("div");
-    who.className = "who";
-    who.textContent = m.role === "user" ? "You" : "Eva";
-    const ts = document.createElement("div");
-    ts.className = "ts";
-    ts.textContent = formatTs(m.ts);
-    meta.appendChild(who);
-    meta.appendChild(ts);
-    const body = document.createElement("div");
-    body.className = "msg-body";
-    renderMarkdownInto(body, m.content);
-    div.appendChild(meta);
-    div.appendChild(body);
-    responseEl.appendChild(div);
-  }
-  if (scrollToBottom) {
-    responseEl.scrollTop = responseEl.scrollHeight;
-  } else if (preserveScroll) {
-    responseEl.scrollTop = prevTop;
-  }
+  return false;
+}
+
+function getRegenerateOptions(index) {
+  if (history[index]?.role !== "assistant") return null;
+  const lastIdx = lastAssistantIndex();
+  return {
+    enabled: !chatBusy && index === lastIdx && hasUserBeforeIndex(index),
+    onClick: () => void regenerateLastReply(),
+  };
+}
+
+function paintChat(options = {}) {
+  chatRenderSig = renderChat(responseEl, history, {
+    ...options,
+    chatRenderSig,
+    emptyText: emptyChatText(),
+    getRegenerate: getRegenerateOptions,
+  });
 }
 
 function openSettings(force = false) {
@@ -622,6 +624,7 @@ connSave?.addEventListener("click", async () => {
     await api.healthCheck();
     closeSettings();
     await pullHistoryFromServer();
+    wsSync.restart();
     startHistorySync();
   } catch (err) {
     connStatus.className = "settings-status err";
@@ -633,17 +636,28 @@ connSave?.addEventListener("click", async () => {
  * Server file is source of truth for PC ↔ phone sync.
  * Skip while chatBusy so we don't wipe the streaming turn.
  */
-async function pullHistoryFromServer({ scrollToBottom = false } = {}) {
+async function pullHistoryFromServer({ scrollToBottom = false, loaded } = {}) {
   if (chatBusy) return false;
   try {
-    const loaded = await api.loadChatHistory();
-    if (!Array.isArray(loaded)) return false;
-    if (historySig(loaded) === chatRenderSig && responseEl.querySelector(".msg")) {
+    const data = loaded ?? (await api.loadChatHistory());
+    if (!Array.isArray(data)) return false;
+    if (historySig(data) === chatRenderSig && responseEl.querySelector(".msg")) {
       return true;
     }
+    const prevCount = history.length;
+    const prevPrefix = prevCount ? historySig(history.slice(0, prevCount)) : "";
     history.length = 0;
-    history.push(...loaded);
-    renderChat(scrollToBottom ? { scrollToBottom: true } : { preserveScroll: true });
+    history.push(...data);
+    const loadedPrefix = prevCount ? historySig(data.slice(0, prevCount)) : "";
+    const animateFrom =
+      prevCount > 0 && data.length > prevCount && loadedPrefix === prevPrefix
+        ? prevCount
+        : -1;
+    paintChat(
+      scrollToBottom
+        ? { scrollToBottom: true, animateFrom }
+        : { preserveScroll: true, animateFrom },
+    );
     return true;
   } catch (err) {
     console.warn("pull history failed", err);
@@ -654,6 +668,7 @@ async function pullHistoryFromServer({ scrollToBottom = false } = {}) {
 function startHistorySync() {
   if (syncTimer) clearInterval(syncTimer);
   syncTimer = setInterval(() => {
+    if (wsSync.isConnected()) return;
     if (chatBusy) return;
     if (document.visibilityState !== "visible") return;
     void pullHistoryFromServer();
@@ -699,7 +714,7 @@ clearBtn.addEventListener("click", async () => {
   } catch (err) {
     console.warn(err);
   }
-  renderChat({ force: true });
+  paintChat({ force: true });
   promptEl.focus();
 });
 
@@ -802,6 +817,84 @@ fileChipClearEl?.addEventListener("click", () => {
   clearPendingFile();
 });
 
+function chatProgressHandler(pending) {
+  return (info) => {
+    const stage = String(info?.stage || "");
+    const msg = String(info?.message || "");
+    if (stage === "done") return;
+    if (stage === "stream") {
+      pending.showStream(msg || "…");
+    } else {
+      const tip = msg.trim();
+      if (!tip) return;
+      pending.showTyping(tip);
+    }
+  };
+}
+
+async function requestAssistantReply({ pending, attachments, regenerate = false } = {}) {
+  return api.askChat(contextForModel(), {
+    attachments,
+    regenerate,
+    onProgress: chatProgressHandler(pending),
+  });
+}
+
+async function pushAssistantReply(pending, content) {
+  history.push({ role: "assistant", content, ts: nowTs() });
+  await persist();
+  pending.remove();
+  const index = history.length - 1;
+  appendChatMessage(responseEl, history[index], {
+    index,
+    getRegenerate: getRegenerateOptions,
+  });
+  chatRenderSig = historySig(history);
+}
+
+async function runAssistantTurn({ attachments } = {}) {
+  chatBusy = true;
+  setSettingsLocked(true);
+  setComposerBusy(true);
+  syncRegenerateButtons(responseEl, getRegenerateOptions);
+  setMood("thinking");
+  const pending = appendTypingIndicator(responseEl);
+  pending.showTyping();
+
+  try {
+    const answer = await requestAssistantReply({ pending, attachments });
+    clearPendingFile();
+    await pushAssistantReply(pending, answer);
+    setMood("happy", 1200);
+  } catch (err) {
+    await pushAssistantReply(pending, String(err?.message || err));
+    setMood("confused", 1800);
+  } finally {
+    chatBusy = false;
+    setSettingsLocked(false);
+    setComposerBusy(false);
+    syncRegenerateButtons(responseEl, getRegenerateOptions);
+    promptEl.focus();
+  }
+}
+
+async function regenerateLastReply() {
+  if (chatBusy) return;
+  const idx = lastAssistantIndex();
+  if (idx < 0 || !hasUserBeforeIndex(idx)) return;
+
+  await pullHistoryFromServer();
+  const regenIdx = lastAssistantIndex();
+  if (regenIdx < 0 || !hasUserBeforeIndex(regenIdx)) return;
+
+  history.splice(regenIdx, 1);
+  await persist();
+  paintChat({ force: true, scrollToBottom: true });
+  chatRenderSig = historySig(history);
+
+  await runAssistantTurn();
+}
+
 async function send() {
   const typed = promptEl.value.trim();
   if ((!typed && !pendingFile) || chatBusy) return;
@@ -818,23 +911,22 @@ async function send() {
 
   history.push({ role: "user", content: prompt, ts: nowTs() });
   await persist();
-  renderChat({ scrollToBottom: true });
+  appendChatMessage(responseEl, history[history.length - 1], {
+    index: history.length - 1,
+    getRegenerate: getRegenerateOptions,
+  });
+  chatRenderSig = historySig(history);
 
-  chatBusy = true;
-  setSettingsLocked(true);
-  setComposerBusy(true);
-  setMood("thinking");
-  const thinking = document.createElement("div");
-  thinking.className = "msg eva muted msg-body";
-  thinking.dataset.progress = "1";
-  thinking.textContent = "Eva 正在處理…";
-  responseEl.appendChild(thinking);
-  responseEl.scrollTop = responseEl.scrollHeight;
-
-  try {
-    let attachments;
-    if (file) {
-      thinking.textContent = `正在讀取 ${file.name}…`;
+  let attachments;
+  if (file) {
+    chatBusy = true;
+    setSettingsLocked(true);
+    setComposerBusy(true);
+    syncRegenerateButtons(responseEl, getRegenerateOptions);
+    setMood("thinking");
+    const pending = appendTypingIndicator(responseEl);
+    pending.showTyping(`正在讀取 ${file.name}…`);
+    try {
       const data = await fileToBase64(file);
       attachments = [
         {
@@ -844,53 +936,30 @@ async function send() {
           data,
         },
       ];
+      pending.showTyping();
+      const answer = await requestAssistantReply({ pending, attachments });
+      clearPendingFile();
+      await pushAssistantReply(pending, answer);
+      setMood("happy", 1200);
+    } catch (err) {
+      await pushAssistantReply(pending, String(err?.message || err));
+      setMood("confused", 1800);
+    } finally {
+      chatBusy = false;
+      setSettingsLocked(false);
+      setComposerBusy(false);
+      syncRegenerateButtons(responseEl, getRegenerateOptions);
+      promptEl.focus();
     }
-    const answer = await api.askChat(contextForModel(), {
-      attachments,
-      onProgress: (info) => {
-        const stage = String(info?.stage || "");
-        const msg = String(info?.message || "");
-        if (stage === "done") return;
-        if (stage === "stream") {
-          thinking.classList.remove("muted");
-          renderMarkdownInto(thinking, msg || "…");
-        } else {
-          const tip = msg.trim();
-          if (!tip) return;
-          thinking.classList.add("muted");
-          thinking.textContent = tip;
-        }
-        responseEl.scrollTop = responseEl.scrollHeight;
-      },
-    });
-    clearPendingFile();
-    history.push({ role: "assistant", content: answer, ts: nowTs() });
-    await persist();
-    renderChat({ scrollToBottom: true });
-    setMood("happy", 1200);
-  } catch (err) {
-    history.push({
-      role: "assistant",
-      content: String(err?.message || err),
-      ts: nowTs(),
-    });
-    await persist();
-    renderChat({ scrollToBottom: true });
-    setMood("confused", 1800);
-  } finally {
-    chatBusy = false;
-    setSettingsLocked(false);
-    setComposerBusy(false);
-    promptEl.focus();
+    return;
   }
+
+  await runAssistantTurn();
 }
 
 sendBtn.addEventListener("click", send);
-promptEl.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && !e.shiftKey) {
-    e.preventDefault();
-    send();
-  }
+attachComposerEnterToSend(promptEl, send, {
+  canSend: () => !chatBusy && !sendBtn.disabled,
 });
 
 async function bootstrapChat() {
@@ -903,7 +972,7 @@ async function bootstrapChat() {
   }
   const ok = await pullHistoryFromServer({ scrollToBottom: true });
   if (!ok && !responseEl.querySelector(".msg")) {
-    renderChat({ force: true });
+    paintChat({ force: true });
     if (!history.length) {
       responseEl.classList.add("muted");
       responseEl.textContent =
@@ -912,17 +981,17 @@ async function bootstrapChat() {
   }
 }
 
-(async () => {
-  document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible" && !chatBusy) {
-      void pullHistoryFromServer();
-    }
-  });
-  if (feat.connectionSettings && needsSetup(feat.platform)) {
-    openSettings(true);
-    responseEl.textContent = "請先完成連線設定…";
-    return;
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && !chatBusy) {
+    void pullHistoryFromServer();
   }
-  await bootstrapChat();
-  startHistorySync();
-})();
+});
+if (feat.connectionSettings && needsSetup(feat.platform)) {
+  openSettings(true);
+  responseEl.textContent = "請先完成連線設定…";
+  return;
+}
+await bootstrapChat();
+wsSync.start();
+startHistorySync();
+}

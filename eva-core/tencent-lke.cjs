@@ -4,9 +4,38 @@ const path = require("node:path");
 const { getDataDir } = require("./env.cjs");
 const { nowMs, logTiming } = require("./timing.cjs");
 const { prepareTencentAttachments } = require("./tencent-lke-files.cjs");
+const { installSystemCa } = require("./tls-ca.cjs");
+
+try {
+  require("node:dns").setDefaultResultOrder("ipv4first");
+} catch (_) {}
+
+const {
+  MODEL_BALANCE_CODE,
+  createBalanceExhaustedError,
+  isModelBalanceError,
+  modelBalanceFallbackMessage,
+  throwIfModelBalanceError,
+} = require("./fallback-messages.cjs");
 
 const DEFAULT_BASE = "https://wss.lke.tencentcloud.com";
 const DEFAULT_PATH = "/adp/v2/chat";
+
+function isTencentBalanceError(input) {
+  return isModelBalanceError(input);
+}
+
+function tencentBalanceFriendlyMessage() {
+  return modelBalanceFallbackMessage();
+}
+
+function balanceExhaustedError(rawDetail) {
+  return createBalanceExhaustedError(rawDetail);
+}
+
+function throwIfBalanceError(rawDetail) {
+  throwIfModelBalanceError(rawDetail);
+}
 
 function sessionFileName(sessionName) {
   const raw = String(sessionName || "tencent-lke").trim() || "tencent-lke";
@@ -49,11 +78,80 @@ function wrapChatNetworkError(err) {
     return new Error("騰訊雲對話超時。圖片分析可能較慢，請再試一次。");
   }
   const cause = err?.cause;
-  return new Error(
-    `連線騰訊雲對話失敗：${[err?.message, err?.code, cause?.code, cause?.syscall, cause?.message]
-      .filter(Boolean)
-      .join(" | ")}`.slice(0, 360),
+  const bits = [err?.message, err?.code, cause?.code, cause?.syscall, cause?.message]
+    .filter(Boolean)
+    .join(" | ");
+  if (isConnectFail(err)) {
+    return new Error(
+      `Tencent connect timeout (${DEFAULT_BASE.replace(/^https?:\/\//, "")}:443). ${bits}`.slice(0, 360),
+    );
+  }
+  return new Error(`連線騰訊雲對話失敗：${bits}`.slice(0, 360));
+}
+
+function isConnectFail(err) {
+  const cause = err?.cause;
+  const blob = [err?.message, err?.code, cause?.code, cause?.message, cause?.cause?.code]
+    .filter(Boolean)
+    .join(" ");
+  return /UND_ERR_CONNECT_TIMEOUT|Connect Timeout|ENOTFOUND|EAI_AGAIN|ETIMEDOUT|ECONNRESET|UND_ERR_SOCKET|EHOSTUNREACH/i.test(
+    blob,
   );
+}
+
+function connectTimeoutMs() {
+  const n = Number(process.env.TENCENT_LKE_CONNECT_MS || 45000);
+  return Number.isFinite(n) && n >= 5000 ? n : 45000;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+let _tencentHttp = null;
+function tencentHttp() {
+  if (_tencentHttp) return _tencentHttp;
+  try {
+    const { Agent, fetch: undiciFetch } = require("undici");
+    const ms = connectTimeoutMs();
+    _tencentHttp = {
+      fetch: undiciFetch,
+      dispatcher: new Agent({
+        connectTimeout: ms,
+        headersTimeout: 180000,
+        bodyTimeout: 0,
+        connections: 4,
+        connect: {
+          timeout: ms,
+          family: 4,
+        },
+      }),
+    };
+  } catch {
+    _tencentHttp = { fetch: global.fetch, dispatcher: undefined };
+  }
+  return _tencentHttp;
+}
+
+async function fetchTencent(url, init, { attempts = 3 } = {}) {
+  const { fetch: doFetch, dispatcher } = tencentHttp();
+  let last;
+  for (let i = 1; i <= attempts; i++) {
+    try {
+      return await doFetch(url, dispatcher ? { ...init, dispatcher } : init);
+    } catch (err) {
+      last = err;
+      if (init?.signal?.aborted) throw err;
+      if (!isConnectFail(err) || i >= attempts) throw err;
+      const wait = 1500 * i;
+      console.warn(
+        `[Eva] Tencent connect retry ${i}/${attempts} in ${wait}ms:`,
+        err?.cause?.code || err?.code || err?.message,
+      );
+      await sleep(wait);
+    }
+  }
+  throw last;
 }
 
 function startWatchdog(controller, { idleMs, hardMs }) {
@@ -169,7 +267,7 @@ function collectContentPieces(contents) {
   return parts;
 }
 
-function extractReplyText(payload) {
+function extractReplyText(payload, { replyOnly = false } = {}) {
   const messages = payload?.Response?.Messages || payload?.Messages || [];
   const replies = [];
   for (const msg of messages) {
@@ -178,11 +276,17 @@ function extractReplyText(payload) {
     replies.push(...collectContentPieces(msg?.Contents));
   }
   if (replies.length) return replies.join("\n").trim();
+  if (replyOnly) return "";
   const fallback = [];
   for (const msg of messages) {
     fallback.push(...collectContentPieces(msg?.Contents));
   }
   return fallback.join("\n").trim();
+}
+
+function looksLikeJsonReply(text) {
+  const s = String(text || "");
+  return /\{[\s\S]*"action"\s*:/.test(s);
 }
 
 function assembleByKind(kindById, buffers, wantKinds) {
@@ -234,7 +338,8 @@ function parseSseBlock(block) {
   return { eventName: type || eventName, payload, raw: dataStr };
 }
 
-async function tencentLkeChat(userText, { onProgress, onToken, systemRole, sessionName, attachments } = {}) {
+async function tencentLkeChat(userText, { onProgress, onToken, systemRole, sessionName, attachments, timeoutMs, idleMs, replyOnly, planner } = {}) {
+  installSystemCa();
   const cfg = getTencentLkeConfig();
   if (!cfg.appKey) {
     throw new Error(
@@ -285,7 +390,7 @@ async function tencentLkeChat(userText, { onProgress, onToken, systemRole, sessi
     Contents: [{ Type: "text", Text: text }, ...extraContents],
     VisitorId: cfg.visitorId,
     Incremental: true,
-    EnableMultiIntent: true,
+    EnableMultiIntent: planner ? false : true,
     Stream: "enable",
   };
   if (role) {
@@ -298,15 +403,20 @@ async function tencentLkeChat(userText, { onProgress, onToken, systemRole, sessi
     console.log(`[Eva] Tencent request with Eva SystemRole chars=${role.length}`);
   }
 
-  const hardMs = extraContents.length
-    ? Math.max(cfg.timeoutMs, 300000)
-    : cfg.timeoutMs;
-  const idleMs = extraContents.length ? 180000 : Math.min(cfg.timeoutMs, 90000);
+  const hardMs = Number.isFinite(Number(timeoutMs)) && Number(timeoutMs) > 0
+    ? Number(timeoutMs)
+    : extraContents.length
+      ? Math.max(cfg.timeoutMs, 300000)
+      : cfg.timeoutMs;
+  const idleWait = Number.isFinite(Number(idleMs)) && Number(idleMs) > 0
+    ? Number(idleMs)
+    : extraContents.length
+      ? 180000
+      : Math.min(hardMs, planner || replyOnly ? 150000 : 90000);
   const controller = new AbortController();
-  const watchdog = startWatchdog(controller, { idleMs, hardMs });
   let res;
   try {
-    res = await fetch(cfg.chatUrl, {
+    res = await fetchTencent(cfg.chatUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -316,14 +426,15 @@ async function tencentLkeChat(userText, { onProgress, onToken, systemRole, sessi
       signal: controller.signal,
     });
   } catch (err) {
-    watchdog.clear();
     throw wrapChatNetworkError(err);
   }
+  const watchdog = startWatchdog(controller, { idleMs: idleWait, hardMs });
 
   if (!res.ok) {
     watchdog.clear();
     const errBody = await res.text();
     logTiming("Tencent LKE error", t0, `status=${res.status}`);
+    throwIfBalanceError(errBody);
     throw new Error(`Tencent LKE error ${res.status}: ${errBody.slice(0, 400)}`);
   }
 
@@ -344,6 +455,9 @@ async function tencentLkeChat(userText, { onProgress, onToken, systemRole, sessi
       parsed?.error ||
       raw.slice(0, 400) ||
       "empty body";
+    throwIfBalanceError(
+      [parsed?.Error?.Code, parsed?.Code, msg, raw.slice(0, 400)].filter(Boolean).join(" "),
+    );
     throw new Error(`Tencent LKE unexpected response: ${msg}`);
   }
 
@@ -359,9 +473,14 @@ async function tencentLkeChat(userText, { onProgress, onToken, systemRole, sessi
 
     if (type === "error") {
       const err = payload.Error || {};
-      sseError = new Error(
-        String(err.Message || err.Code || payload.Message || "Tencent LKE error"),
+      const detail = String(
+        err.Message || err.Code || payload.Message || payload.Code || "Tencent LKE error",
       );
+      if (isTencentBalanceError(detail)) {
+        sseError = balanceExhaustedError(detail);
+      } else {
+        sseError = new Error(detail);
+      }
       return;
     }
 
@@ -421,7 +540,7 @@ async function tencentLkeChat(userText, { onProgress, onToken, systemRole, sessi
     }
 
     if (type === "response.completed") {
-      const fromDone = extractReplyText(payload);
+      const fromDone = extractReplyText(payload, { replyOnly: Boolean(replyOnly || planner) });
       const streamed = assembleBuffers(kindById, buffers).trim();
       if (fromDone && streamed.includes("![](") && !fromDone.includes("![](")) {
         finalText = `${fromDone}\n${streamed}`.trim();
@@ -463,10 +582,24 @@ async function tencentLkeChat(userText, { onProgress, onToken, systemRole, sessi
   } catch (err) {
     if (isAbortTimeout(err)) {
       const partial = String(assembleBuffers(kindById, buffers) || "").trim();
-      if (partial) {
+      if (partial && !(replyOnly || planner)) {
         console.warn("[Eva] Tencent SSE idle/hard timeout, using partial reply");
         logTiming("Tencent LKE chat (partial)", t0, `chars=${partial.length}`);
         return partial;
+      }
+      if (partial && looksLikeJsonReply(partial)) {
+        console.warn("[Eva] Tencent SSE timeout, using partial JSON reply");
+        logTiming("Tencent LKE chat (partial json)", t0, `chars=${partial.length}`);
+        return partial;
+      }
+      if (partial) {
+        console.warn(
+          "[Eva] Tencent SSE timeout; ignoring non-JSON / thought-only partial:",
+          partial.slice(0, 120),
+        );
+      }
+      if (replyOnly || planner) {
+        throw new Error("騰訊雲規劃超時，未收到完整 JSON 方案。");
       }
       throw wrapChatNetworkError(err);
     }
@@ -480,6 +613,18 @@ async function tencentLkeChat(userText, { onProgress, onToken, systemRole, sessi
   if (!textOut) {
     throw new Error("Tencent LKE returned an empty reply");
   }
+  if ((replyOnly || planner) && !looksLikeJsonReply(textOut)) {
+    if (planner) {
+      console.log(
+        "[Eva] Tencent planner reply is not JSON:",
+        textOut.replace(/\s+/g, " ").slice(0, 80),
+      );
+      return textOut;
+    }
+    throw new Error(
+      `Tencent reply is not JSON (starts: ${textOut.replace(/\s+/g, " ").slice(0, 80)})`,
+    );
+  }
   return textOut;
 }
 
@@ -489,4 +634,8 @@ module.exports = {
   loadTencentSession,
   resetTencentConversation,
   tencentLkeChat,
+  looksLikeJsonReply,
+  isTencentBalanceError,
+  tencentBalanceFriendlyMessage,
+  TENCENT_BALANCE_CODE: MODEL_BALANCE_CODE,
 };

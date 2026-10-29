@@ -4,6 +4,10 @@
  */
 
 import { mediaUrl } from "./api.js";
+import { BICEP_WEEKLY_PLAN, getPlanById, isBicepWeeklyPlanReference } from "./data/trainingPlans.ts";
+import { mountTrainingPlanCard } from "./components/index.ts";
+import "./components/TrainingPlanCard.css";
+import "./styles/oshi-match.css";
 
 function splitCells(line) {
   let s = String(line || "").trim();
@@ -71,8 +75,23 @@ function mediaKind(url) {
   }
   const p = pathname.toLowerCase();
   if (/\.(png|jpe?g|gif|webp|bmp|svg)$/.test(p) || /\/image\//.test(p)) return "image";
+  if (/\.(mp4|webm|mov)$/.test(p)) return "video";
   if (/\.html?$/.test(p)) return "html";
   return "link";
+}
+
+function filenameFromUrl(href, alt) {
+  const fromAlt = String(alt || "")
+    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "")
+    .trim();
+  if (fromAlt && /\.[a-z0-9]{1,8}$/i.test(fromAlt)) return fromAlt.slice(0, 80);
+  try {
+    const base = decodeURIComponent(new URL(href).pathname || "")
+      .split("/")
+      .pop();
+    if (base) return base.slice(0, 80);
+  } catch (_) {}
+  return fromAlt.slice(0, 80) || "eva-download";
 }
 
 function escapeAttr(s) {
@@ -88,7 +107,7 @@ function withHtmlBase(html, href) {
   try {
     baseHref = new URL(".", href).href;
   } catch (_) {}
-  const tag = `<base href="${escapeAttr(baseHref)}"><style>html,body{margin:0!important;padding:0!important;overflow:hidden!important;width:100%!important;height:100%!important;}body{-webkit-overflow-scrolling:auto;}</style>`;
+  const tag = `<base href="${escapeAttr(baseHref)}"><style>html,body{margin:0!important;padding:8px!important;overflow:auto!important;width:auto!important;height:auto!important;min-height:100%;}body{-webkit-overflow-scrolling:touch;}</style>`;
   if (/<head[^>]*>/i.test(raw)) {
     return raw.replace(/<head[^>]*>/i, (m) => `${m}${tag}`);
   }
@@ -104,26 +123,59 @@ function fitEmbedFrame(frame) {
     if (!doc?.documentElement) return;
     const body = doc.body;
     if (body) {
-      body.style.overflow = "hidden";
+      body.style.overflow = "auto";
       body.style.margin = "0";
-      body.style.transformOrigin = "top left";
+      body.style.transform = "";
     }
-    doc.documentElement.style.overflow = "hidden";
-    const w = Math.max(doc.documentElement.scrollWidth, body?.scrollWidth || 0, 1);
-    const h = Math.max(doc.documentElement.scrollHeight, body?.scrollHeight || 0, 1);
-    const scale = Math.min(frame.clientWidth / w, frame.clientHeight / h, 1);
-    if (body && scale > 0 && scale < 0.999) {
-      body.style.transform = `scale(${scale})`;
-      body.style.width = `${Math.round(w)}px`;
-    }
+    doc.documentElement.style.overflow = "auto";
   } catch (_) {}
+}
+
+function appendDownload(parent, href, alt) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "md-media-dl";
+  const name = filenameFromUrl(href, alt);
+  btn.textContent = `下載 ${name}`;
+  btn.addEventListener("click", async () => {
+    const prev = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "下載中…";
+    try {
+      const res = await fetch(mediaUrl(href));
+      if (!res.ok) throw new Error(String(res.status));
+      const blob = await res.blob();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = name;
+      a.rel = "noopener";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      btn.textContent = prev;
+    } catch (_) {
+      btn.textContent = "下載失敗";
+    } finally {
+      btn.disabled = false;
+    }
+  });
+  parent.appendChild(btn);
+}
+
+function appendImageEl(parent, src, alt) {
+  const img = document.createElement("img");
+  img.className = "md-img";
+  img.src = src;
+  img.alt = alt || "";
+  img.referrerPolicy = "no-referrer";
+  parent.appendChild(img);
 }
 
 async function embedHtmlPreview(wrap, href, alt) {
   const frame = document.createElement("iframe");
   frame.className = "md-embed";
   frame.title = alt || "preview";
-  frame.scrolling = "no";
   frame.setAttribute("sandbox", "allow-scripts allow-same-origin");
   frame.referrerPolicy = "no-referrer";
   frame.addEventListener("load", () => fitEmbedFrame(frame));
@@ -131,6 +183,22 @@ async function embedHtmlPreview(wrap, href, alt) {
   try {
     const res = await fetch(mediaUrl(href));
     if (!res.ok) throw new Error(String(res.status));
+    const type = String(res.headers.get("content-type") || "").toLowerCase();
+    if (type.startsWith("image/")) {
+      frame.remove();
+      const blob = await res.blob();
+      appendImageEl(wrap, URL.createObjectURL(blob), alt);
+      return;
+    }
+    if (type.startsWith("video/")) {
+      frame.remove();
+      const video = document.createElement("video");
+      video.className = "md-video";
+      video.controls = true;
+      video.src = mediaUrl(href);
+      wrap.appendChild(video);
+      return;
+    }
     frame.srcdoc = withHtmlBase(await res.text(), href);
   } catch (_) {
     frame.src = mediaUrl(href);
@@ -139,30 +207,39 @@ async function embedHtmlPreview(wrap, href, alt) {
 
 function appendChatMedia(parent, url, alt) {
   const href = String(url || "").trim();
+  if (!href) return;
   const kind = mediaKind(href);
-  const src = mediaUrl(href);
+  const wrap = document.createElement("div");
+  wrap.className = "md-media";
+  parent.appendChild(wrap);
+
   if (kind === "image") {
-    const img = document.createElement("img");
-    img.className = "md-img";
-    img.src = src;
-    img.alt = alt || "";
-    img.referrerPolicy = "no-referrer";
-    parent.appendChild(img);
+    appendImageEl(wrap, mediaUrl(href), alt);
+    appendDownload(wrap, href, alt);
+    return;
+  }
+  if (kind === "video") {
+    const video = document.createElement("video");
+    video.className = "md-video";
+    video.controls = true;
+    video.src = mediaUrl(href);
+    wrap.appendChild(video);
+    appendDownload(wrap, href, alt);
     return;
   }
   if (kind === "html") {
-    const wrap = document.createElement("div");
-    wrap.className = "md-embed-wrap";
-    parent.appendChild(wrap);
-    void embedHtmlPreview(wrap, href, alt);
+    if (isBicepWeeklyPlanReference(href, alt)) {
+      mountTrainingPlanCard(wrap, BICEP_WEEKLY_PLAN);
+      return;
+    }
+    const inner = document.createElement("div");
+    inner.className = "md-embed-wrap";
+    wrap.appendChild(inner);
+    void embedHtmlPreview(inner, href, alt);
+    appendDownload(wrap, href, alt || "參考表");
     return;
   }
-  const a = document.createElement("a");
-  a.href = href;
-  a.rel = "noopener noreferrer";
-  a.textContent = alt || href;
-  a.addEventListener("click", (e) => e.preventDefault());
-  parent.appendChild(a);
+  appendDownload(wrap, href, alt || "檔案");
 }
 
 function appendInline(parent, text) {
@@ -242,6 +319,48 @@ function renderTable(header, aligns, rows) {
   return wrap;
 }
 
+function parseSpecialFence(line) {
+  const trimmed = String(line || "").trim();
+  if (!trimmed.startsWith(":::") || !trimmed.endsWith(":::")) return null;
+  const inner = trimmed.slice(3, -3).trim();
+  const training = /^training-plan\s+(\S+)$/.exec(inner);
+  if (training) return { type: "training-plan", planId: training[1] };
+  if (inner === "oshi-match") return { type: "oshi-match" };
+  return null;
+}
+
+function appendTrainingPlanCard(parent, planId) {
+  const wrap = document.createElement("div");
+  wrap.className = "md-training-plan";
+  const plan = getPlanById(planId) || (planId === "bicep-weekly" ? BICEP_WEEKLY_PLAN : null);
+  if (plan) mountTrainingPlanCard(wrap, plan);
+  else wrap.textContent = `[unknown training plan: ${planId}]`;
+  parent.appendChild(wrap);
+}
+
+function appendOshiMatchCta(parent) {
+  const wrap = document.createElement("div");
+  wrap.className = "md-oshi-match";
+  const cta = document.createElement("div");
+  cta.className = "om-chat-cta";
+  const icon = document.createElement("span");
+  icon.className = "om-chat-cta-icon";
+  icon.textContent = "✨";
+  icon.setAttribute("aria-hidden", "true");
+  const text = document.createElement("p");
+  text.className = "om-chat-cta-text";
+  text.textContent = "LUMINA 推し配對 · 5 題找出你的本命 member";
+  const link = document.createElement("a");
+  link.className = "om-chat-cta-link";
+  link.href = "#/oshi";
+  link.textContent = "開始配對 →";
+  cta.appendChild(icon);
+  cta.appendChild(text);
+  cta.appendChild(link);
+  wrap.appendChild(cta);
+  parent.appendChild(wrap);
+}
+
 function parseBlocks(text) {
   const lines = String(text ?? "").split(/\r?\n/);
   const blocks = [];
@@ -250,6 +369,18 @@ function parseBlocks(text) {
   while (i < lines.length) {
     const line = lines[i];
     const trimmed = line.trim();
+
+    const specialFence = parseSpecialFence(line);
+    if (specialFence?.type === "training-plan") {
+      blocks.push({ type: "training-plan", planId: specialFence.planId });
+      i += 1;
+      continue;
+    }
+    if (specialFence?.type === "oshi-match") {
+      blocks.push({ type: "oshi-match" });
+      i += 1;
+      continue;
+    }
 
     if (trimmed.startsWith("```")) {
       const lang = trimmed.slice(3).trim();
@@ -369,6 +500,14 @@ export function renderMarkdownInto(el, text) {
     return el;
   }
   for (const block of blocks) {
+    if (block.type === "training-plan") {
+      appendTrainingPlanCard(el, block.planId);
+      continue;
+    }
+    if (block.type === "oshi-match") {
+      appendOshiMatchCta(el);
+      continue;
+    }
     if (block.type === "table") {
       el.appendChild(renderTable(block.header, block.aligns, block.rows));
       continue;

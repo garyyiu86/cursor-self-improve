@@ -9,10 +9,14 @@
     "preview": "vite preview"
   },
   "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
     "vite": "^6.2.0"
   },
   "dependencies": {
     "@capacitor/core": "^7.6.8",
-    "@capacitor/keyboard": "^7.0.6"
+    "@capacitor/keyboard": "^7.0.6",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^7.4.0"
   }
 }

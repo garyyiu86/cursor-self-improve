@@ -154,10 +154,12 @@
 
       sendBtn.addEventListener("click", send);
       promptEl.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" && !e.shiftKey) {
-          e.preventDefault();
-          send();
-        }
+        if (e.key !== "Enter" || e.isComposing || e.keyCode === 229) return;
+        const modifierSend = (e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey;
+        const plainSend = !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey;
+        if (!modifierSend && !plainSend) return;
+        e.preventDefault();
+        send();
       });
     </script>
   </body>

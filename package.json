@@ -43,7 +43,8 @@
     "cos-nodejs-sdk-v5": "^3.0.0",
     "opencc-js": "^1.4.1",
     "pg": "^8.22.0",
-    "sharp": "^0.35.3"
+    "sharp": "^0.35.3",
+    "ws": "^8.21.3"
   },
   "devDependencies": {
     "@types/node": "^22.13.10",

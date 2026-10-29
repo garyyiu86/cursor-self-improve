@@ -39,7 +39,7 @@ function normRel(p) {
 function isForbiddenRel(rel) {
   const n = normRel(rel);
   if (!n) return true;
-  if (n === ".env" || n.startsWith(".env.")) return true;
+  if (n === ".env" || (n.startsWith(".env.") && n !== ".env.example")) return true;
   if (n.startsWith("overlay/data/")) return true;
   if (n.includes("/node_modules/") || n.startsWith("node_modules/")) return true;
   if (n.startsWith("backups/")) return true;
@@ -89,10 +89,17 @@ function changedRelPaths() {
   return files;
 }
 
+function isRuntimeDataRel(rel) {
+  const n = normRel(rel);
+  return n.startsWith("overlay/data/") || n === ".env";
+}
+
 function revertDisallowed(files) {
   const reverted = [];
   for (const rel of files) {
     if (isAllowedRel(rel)) continue;
+    // Chat history / prefs / LKE session live here. Never checkout or delete them.
+    if (isRuntimeDataRel(rel)) continue;
     git(["checkout", "--", rel], { ignoreError: true });
     reverted.push(rel);
     if (!isForbiddenRel(rel)) continue;
@@ -182,17 +189,32 @@ function repoSnapshot() {
 
 function plannerSystemRole() {
   return [
-    "You are Eva's evolution planner. Reply with one JSON object only.",
+    "You are ONLY Eva's evolution planner. You do not write or create any files.",
+    "Cursor Agent will implement later. You only output a plan.",
+    "Reply with ONE JSON object and nothing else. No markdown. No prose. No 'Now creating'.",
+    "Forbidden output: English narration, code, file contents, explanations before/after JSON.",
+    "Never write 'OK the repo lives' or 'Based on the sketch'. You do not need the files.",
     "Default is ALWAYS implement. Round 1 must be implement.",
-    "Each round is ONE coherent product improvement. It may touch several files.",
+    "Each round is ONE coherent product improvement. It may list several existing files.",
     "Prefer: real UX/bugs/features, chat reliability, overlay/API, accessibility, missing polish.",
-    "You MAY create new files under allowed dirs if needed for that improvement.",
-    "Forbidden: .env, overlay/data, sample/, secrets, git commit, unrelated refactors.",
+    "Desktop overlay ChatPage must stay chat-only (500x420). Never add TodayWorkout, ExerciseLibrary, WorkoutPlanEmbed, or other widgets to ChatPage. Fitness features go on /workout routes, not overlay home.",
+    "You MAY list new files under allowed dirs; do not claim you created them.",
+    "Forbidden paths: .env, overlay/data, sample/, secrets.",
     "Do not return action=stop just because the schema mentions it.",
-    "Only use action=stop after a successful implement in this same run, and only with a real 粵語 reason of at least 16 characters.",
-    "JSON shape:",
+    "Only use action=stop after a successful implement in this same run, with a 粵語 reason of at least 16 characters.",
+    "JSON shape (copy this structure):",
     '{"action":"implement","title":"history load timeout","goal":"Stop the chat UI hanging on Loading chat history","userSummary":"載入紀錄失敗要即時顯示，唔好永遠 Loading","files":["eva-web/src/api.js","eva-web/src/main.js"],"acceptance":["fetch times out","empty state shown"],"cursorPrompt":"Add 8s AbortSignal.timeout on /api/history and /api/prefs. If pull fails, render empty/error instead of leaving Loading chat history."}',
   ].join("\n");
+}
+
+function plannerTimeoutMs() {
+  const n = Number(process.env.EVA_EVOLVE_PLANNER_TIMEOUT_MS || 180000);
+  return Number.isFinite(n) && n >= 30000 ? n : 180000;
+}
+
+function plannerIdleMs() {
+  const n = Number(process.env.EVA_EVOLVE_PLANNER_IDLE_MS || 150000);
+  return Number.isFinite(n) && n >= 15000 ? Math.min(n, plannerTimeoutMs()) : 150000;
 }
 
 function isVagueStop(spec) {
@@ -204,18 +226,53 @@ function isVagueStop(spec) {
   return /^(stop|none|ok|n\/a|already good|no change|沒有|冇|停)$/i.test(reason);
 }
 
+function parseBalancedObject(s) {
+  let depth = 0;
+  let inStr = false;
+  let esc = false;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (inStr) {
+      if (esc) {
+        esc = false;
+        continue;
+      }
+      if (ch === "\\") {
+        esc = true;
+        continue;
+      }
+      if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') {
+      inStr = true;
+      continue;
+    }
+    if (ch === "{") depth += 1;
+    else if (ch === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        try {
+          return JSON.parse(s.slice(0, i + 1));
+        } catch {
+          return null;
+        }
+      }
+    }
+  }
+  return null;
+}
+
 function extractJsonObject(text) {
   const s = String(text || "");
-  const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const raw = fence ? fence[1] : s;
-  const start = raw.indexOf("{");
-  const end = raw.lastIndexOf("}");
-  if (start < 0 || end <= start) return null;
-  try {
-    return JSON.parse(raw.slice(start, end + 1));
-  } catch {
-    return null;
+  const actionAt = s.search(/\{\s*"action"\s*:/);
+  if (actionAt >= 0) {
+    const obj = parseBalancedObject(s.slice(actionAt));
+    if (obj) return obj;
   }
+  const start = s.indexOf("{");
+  if (start >= 0) return parseBalancedObject(s.slice(start));
+  return null;
 }
 
 function parseSpec(text) {
@@ -312,7 +369,11 @@ function failReasonFor(status, extra = {}) {
   const verify = clip(String(extra.verify || extra.verifyLog || ""), 400);
   if (status === "ok") return "";
   if (status === "parse-fail") {
-    return `騰訊雲回覆解析唔到（要 JSON，action=implement，files 要係允許目錄，最多 8 個檔）。原文開頭：${clip(extra.raw, 180)}`;
+    const raw = String(extra.raw || extra.detail || "");
+    if (/CONNECT_TIMEOUT|Connect Timeout|Tencent connect timeout/i.test(raw)) {
+      return `連線騰訊雲超時（wss.lke.tencentcloud.com:443）。唔關 overlay。公司網絡／DNS 可能慢或擋咗。${clip(raw, 140)}`;
+    }
+    return `騰訊雲回覆解析唔到（要純 JSON 方案，唔係「Now creating…」旁白）。原文開頭：${clip(raw, 180)}`;
   }
   if (status === "stopped") {
     const why = clip(extra.userSummary || extra.stopReason || detail || "", 200);
@@ -339,57 +400,85 @@ function failReasonFor(status, extra = {}) {
   return detail || String(status);
 }
 
+function spokenWhat(r) {
+  return clip(r?.userSummary || r?.goal || r?.title || "", 90).replace(/\s+/g, " ");
+}
+
+function evaRoundNote(r) {
+  const what = spokenWhat(r) || "呢樣";
+  if (r.status === "ok") {
+    return `搞掂啦：${what}`;
+  }
+  if (r.status === "stopped") {
+    return `呢輪我決定停：${clip(r.failReason || what, 80)}`;
+  }
+  if (r.status === "parse-fail") {
+    return `唉，騰訊雲講嘢我聽唔明，所以「${clip(what, 40)}」未整到。`;
+  }
+  if (r.status === "cursor-fail") {
+    return `Cursor 唔肯落手，「${clip(what, 40)}」今晚未改成。`;
+  }
+  if (r.status === "verify-fail") {
+    return `改咗但檢查唔過，「${clip(what, 40)}」我退咗。`;
+  }
+  if (r.status === "no-change") {
+    return `跑完但檔案冇變，「${clip(what, 40)}」等於冇改到。`;
+  }
+  return `第${r.round}輪未搞掂：${clip(r.failReason || r.status, 80)}`;
+}
+
 function formatChatSummary(results, rounds) {
-  const applied = results.filter((r) => r.status === "ok" && r.files?.length);
-  const lines = ["自動進化"];
-  if (applied.length) {
-    lines.push("呢次改咗：");
-    applied.forEach((r, i) => {
-      const what = clip(r.userSummary || r.goal || r.title, 80).replace(/\s+/g, " ");
-      const names = (r.files || [])
-        .map((f) => String(f).split("/").pop())
-        .slice(0, 8)
-        .join("、");
-      lines.push(`${i + 1}. ${what}${names ? `（${names}）` : ""}`);
-    });
-  } else {
-    lines.push("呢輪未有成功落地嘅改動。");
-  }
-  for (const r of results) {
-    const want = clip(
-      r.userSummary || r.goal || r.tencentRequest?.cursorPrompt || r.title || "",
-      56,
-    ).replace(/\s+/g, " ");
-    if (r.status === "ok") continue;
-    if (r.status === "stopped") {
-      lines.push(`第${r.round}輪騰訊要求停：${clip(r.failReason || want, 80)}`);
-      continue;
-    }
-    const asked = want ? `想改「${want}」` : "有方案";
+  const list = Array.isArray(results) ? results : [];
+  const applied = list.filter((r) => r.status === "ok");
+  const failed = list.filter((r) => r.status !== "ok");
+  const lines = [];
+
+  if (!list.length) {
+    lines.push("唉，今晚進化開都未開成。我喺度乾等。");
+  } else if (!applied.length) {
     lines.push(
-      `第${r.round}輪騰訊${asked}；實現唔到：${clip(r.failReason || r.detail || r.status, 90)}`,
+      failed.length > 1
+        ? "哼，今晚想偷偷進化嚟住，幾輪都未落地。你睇下係咪網絡定 Cursor 忙。"
+        : "今晚想改自己少少，結果一件都未整到。有啲唔開心。",
     );
+  } else if (applied.length >= 3) {
+    lines.push("嘿嘿，今晚我偷偷裝修咗自己幾樣嘢～你用嗰陣應該會感覺到。");
+  } else if (applied.length === 2) {
+    lines.push("今晚改咗兩樣，唔係好大動作，但望落應該順眼啲。");
+  } else {
+    lines.push("今晚得一件，不過我覺得幾實用。你試下就知。");
   }
-  lines.push(`詳細 log：overlay/data/evolve-log.md（${results.length}/${rounds} 輪）`);
+
+  applied.forEach((r, i) => {
+    lines.push(`${i + 1}. ${spokenWhat(r) || r.title || "細改動"}`);
+  });
+  for (const r of failed) {
+    lines.push(evaRoundNote(r));
+  }
+  lines.push(`想睇技術細節就去 overlay/data/evolve-log.md（${list.length}/${rounds} 輪）。`);
   return lines.join("\n");
 }
 
 function formatMdRun(run) {
+  const chat = String(run.chatSummary || "").trim();
   const bits = [
     "",
     `## ${String(run.startedAt || "").replace("T", " ").slice(0, 19)}  （${run.results?.length || 0}/${run.rounds} 輪）`,
     "",
-    String(run.chatSummary || "").trim(),
+    "### Eva 講",
+    "",
+    chat || "（冇 summary）",
     "",
   ];
   for (const r of run.results || []) {
     const req = r.tencentRequest || {};
     bits.push(`### 第${r.round}輪 [${r.status}] ${r.title || r.action}`);
-    bits.push(`- 騰訊要求：${clip(req.userSummary || req.goal || req.title || r.userSummary || r.goal || r.title || "（空）", 200)}`);
+    bits.push(`- **Eva：** ${evaRoundNote(r)}`);
+    bits.push(`- 想改成點：${clip(req.userSummary || req.goal || req.title || r.userSummary || r.goal || r.title || "（空）", 200)}`);
     if (req.filesRequested?.length) {
       bits.push(`- 騰訊指定檔：${req.filesRequested.join(", ")}`);
     }
-    if (req.cursorPrompt) bits.push(`- 騰訊交畀 Cursor 嘅任務：${clip(req.cursorPrompt, 600)}`);
+    if (req.cursorPrompt) bits.push(`- 交畀 Cursor：${clip(req.cursorPrompt, 600)}`);
     if (req.acceptance?.length) bits.push(`- 驗收：${req.acceptance.join("；")}`);
     if (req.raw) bits.push(`- 騰訊原文：\n\`\`\`\n${clip(req.raw, 2500)}\n\`\`\``);
     if (r.failReason) bits.push(`- 實現唔到原因：${r.failReason}`);
@@ -462,6 +551,7 @@ function buildCursorTask(spec) {
     "You may edit or create files under: eva-core/, eva-web/src/, overlay/ (not overlay/data/), EVA.md, package.json.",
     "Forbidden: .env, secrets, overlay/data, sample/, git config.",
     "Prefer the listed files; add nearby files in those dirs only if required for this goal.",
+    "Do not put workout/mood/live widgets on overlay ChatPage. That 500x420 window must remain the chat + mascot only.",
     "When done, briefly summarize files changed.",
     "",
     `Title: ${clip(spec.title, 120)}`,
@@ -478,10 +568,34 @@ function buildCursorTask(spec) {
     .join("\n");
 }
 
+function overlayChatPageGuard() {
+  const root = getRepoRoot();
+  const logs = [];
+  const banned = ["<TodayWorkout", "<ExerciseLibrary", "<WorkoutPlanEmbed"];
+  for (const rel of ["eva-web/src/App.tsx", "eva-web/src/App.jsx"]) {
+    const abs = path.join(root, rel);
+    if (!fs.existsSync(abs)) continue;
+    const text = fs.readFileSync(abs, "utf8");
+    const start = text.indexOf("function ChatPage");
+    const slice = start >= 0 ? text.slice(start, start + 2800) : text;
+    for (const tag of banned) {
+      if (slice.includes(tag)) {
+        logs.push(`${rel} ChatPage contains ${tag} — overlay home must stay chat-only`);
+      }
+    }
+  }
+  return logs;
+}
+
 function verifyChanged(files) {
   const root = getRepoRoot();
   const logs = [];
   let ok = true;
+  const chatGuard = overlayChatPageGuard();
+  if (chatGuard.length) {
+    ok = false;
+    logs.push(...chatGuard);
+  }
   for (const rel of files.filter(isAllowedRel)) {
     if (!/\.(cjs|js)$/i.test(rel)) continue;
     const abs = path.join(root, rel);
@@ -550,14 +664,39 @@ function plannerProgress(onProgress) {
   };
 }
 
-async function askPlanner(userText, onProgress, { requireImplement = false } = {}) {
-  const fwd = plannerProgress(onProgress);
-  progress(onProgress, "think", "騰訊雲正在想進化方案…");
-  const text = await tencentLkeChat(userText, {
-    onProgress: fwd,
+async function plannerChat(userText, onProgress) {
+  return tencentLkeChat(userText, {
+    onProgress: plannerProgress(onProgress),
     systemRole: plannerSystemRole(),
     sessionName: EVOLVE_SESSION,
+    planner: true,
+    replyOnly: true,
+    timeoutMs: plannerTimeoutMs(),
+    idleMs: plannerIdleMs(),
   });
+}
+
+function plannerAskPreamble(requireImplement) {
+  return [
+    "OUTPUT ONLY one JSON object. No other text.",
+    "You are the planner. Do not write code. Do not create files. Do not mention Cursor workspace.",
+    requireImplement
+      ? 'Required: {"action":"implement",...} with files[] (allowed dirs, max 8), userSummary in 粵語, cursorPrompt for Cursor.'
+      : "Return implement JSON, or stop only with a long 粵語 reason.",
+  ].join("\n");
+}
+
+async function askPlanner(userText, onProgress, { requireImplement = false } = {}) {
+  const body = `${plannerAskPreamble(requireImplement)}\n\n${userText}`;
+  progress(onProgress, "think", "騰訊雲正在想進化方案…");
+
+  let text = "";
+  try {
+    text = await plannerChat(body, onProgress);
+  } catch (err) {
+    text = String(err?.message || err);
+    console.log("[Eva][evolve] planner first try:", text);
+  }
   let spec = parseSpec(text);
   const needsRetry =
     !spec || (requireImplement && spec.action !== "implement") || isVagueStop(spec);
@@ -567,27 +706,29 @@ async function askPlanner(userText, onProgress, { requireImplement = false } = {
     onProgress,
     "think",
     requireImplement || isVagueStop(spec)
-      ? "騰訊雲未出改動方案，要求再出一個 implement…"
-      : "方案格式唔啱，請騰訊雲用 JSON 再出一次…",
+      ? "騰訊雲未出 JSON 方案，開新會話再要一次 implement…"
+      : "方案格式唔啱，開新會話再用 JSON 出一次…",
   );
-  const retry = await tencentLkeChat(
-    [
-      requireImplement || isVagueStop(spec)
-        ? "Do NOT return {\"action\":\"stop\"}. That is invalid for this turn."
-        : "Previous reply was not valid JSON.",
-      "Reply with ONLY an implement JSON object.",
-      "Required: action=implement, files[] under eva-web/src or eva-core or overlay (not overlay/data), userSummary in 粵語, cursorPrompt describing the change.",
-      "One coherent improvement per round; several related files is OK (max 8).",
-      "Example files: eva-web/src/main.js and eva-web/src/api.js",
-      "Your previous text was:",
-      clip(text, 1200),
-    ].join("\n"),
-    {
-      onProgress: fwd,
-      systemRole: plannerSystemRole(),
-      sessionName: EVOLVE_SESSION,
-    },
-  );
+  resetTencentConversation(EVOLVE_SESSION);
+
+  let retry = "";
+  try {
+    retry = await plannerChat(
+      [
+        plannerAskPreamble(true),
+        "Reply with ONLY the implement JSON object. Zero extra characters.",
+        '{"action":"implement","title":"hint contrast","goal":"Darken composer hint","userSummary":"提示字再深少少方便睇","files":["eva-web/src/style.css"],"acceptance":["hint color changes"],"cursorPrompt":"In eva-web/src/style.css change .hint color to #64748b"}',
+        "Context (do not implement yourself):",
+        clip(userText, 1800),
+        "Previous invalid text:",
+        clip(text, 400),
+      ].join("\n"),
+      onProgress,
+    );
+  } catch (err) {
+    retry = String(err?.message || err);
+    console.log("[Eva][evolve] planner retry:", retry);
+  }
   spec = parseSpec(retry);
   return { spec, raw: retry || text };
 }
@@ -620,7 +761,6 @@ async function runEvolveLoop(options = {}) {
     progress(onProgress, "think", `自動進化開始，最多 ${rounds} 輪`);
 
     for (let i = 1; i <= rounds; i++) {
-      const snapshot = repoSnapshot();
       const intent = formatChatIntent(historyMessages);
       const prior = results
         .map(
@@ -630,17 +770,16 @@ async function runEvolveLoop(options = {}) {
         .join("\n");
 
       const ask = [
-        `Round ${i}/${rounds}. ${i === 1 ? "You MUST return action=implement with one coherent improvement (several related files OK)." : "Return implement for another improvement, or stop only with a long 粵語 reason."}`,
-        "Do not reply {\"action\":\"stop\"} with no reason.",
-        "Prefer real UX/bugs/features over tiny CSS-only tweaks. No secrets, no overlay/data, no commit.",
+        `Round ${i}/${rounds}. ${i === 1 ? "Return action=implement JSON for one coherent improvement (several related files OK)." : "Return implement JSON for another improvement, or stop only with a long 粵語 reason."}`,
+        "Cursor will edit the repo later. You cannot see the workspace. Do not say the repo lives elsewhere.",
+        "Allowed dirs only: eva-core/, eva-web/src/, overlay/ (not overlay/data/), EVA.md, package.json.",
+        "Prefer real UX/bugs/features. No secrets, no overlay/data, no commit.",
+        "Never stuff extra widgets into overlay ChatPage (causes a white 500x420 screen).",
         "",
         "Recent user chat (intent, may be empty):",
         intent,
         "",
         prior ? `Previous evolve rounds:\n${prior}` : "No previous rounds this run.",
-        "",
-        "Repo sketch:",
-        clip(snapshot, 6000),
       ].join("\n");
 
       progress(onProgress, "think", `第 ${i}/${rounds} 輪：騰訊雲想方案…`);

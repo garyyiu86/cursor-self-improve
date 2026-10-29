@@ -8,7 +8,9 @@ const eva = require("./index.cjs");
 const knowledgeDb = require("./knowledge-db.cjs");
 const { kbEnabled } = require("./knowledge.cjs");
 const { tencentLkeConfigured } = require("./tencent-lke.cjs");
+const { resolveBalanceFallback, stripLastAssistantReply } = require("./chat-service.cjs");
 const { tencentUploadConfigured } = require("./tencent-lke-files.cjs");
+const { attachWsSync } = require("./ws-sync.cjs");
 
 function readJsonBody(req, maxBytes = 2 * 1024 * 1024) {
   const limit =
@@ -205,12 +207,16 @@ function startServer(options = {}) {
           sendJson(res, 400, { error: "Expected array body" });
           return;
         }
-        sendJson(res, 200, eva.saveChatHistory(body));
+        const saved = eva.saveChatHistory(body);
+        wsSync?.broadcastHistory(saved);
+        sendJson(res, 200, saved);
         return;
       }
 
       if (req.method === "DELETE" && pathname === "/api/history") {
-        sendJson(res, 200, eva.clearChatHistory());
+        const cleared = eva.clearChatHistory();
+        wsSync?.broadcastHistory(cleared);
+        sendJson(res, 200, cleared);
         return;
       }
 
@@ -222,6 +228,141 @@ function startServer(options = {}) {
       if (req.method === "PATCH" && pathname === "/api/prefs") {
         const body = await readJsonBody(req);
         sendJson(res, 200, eva.savePrefs(body || {}));
+        return;
+      }
+
+      if (req.method === "GET" && pathname === "/api/workout/library") {
+        const { getExercises, MUSCLE_GROUPS, MUSCLE_GROUP_META } = await import(
+          "./services/exerciseLibrary.js"
+        );
+        const muscleGroup = String(url.searchParams.get("muscleGroup") || "").trim();
+        const difficulty = String(url.searchParams.get("difficulty") || "").trim();
+        const filter = {};
+        if (muscleGroup) filter.muscleGroup = muscleGroup;
+        if (difficulty) filter.difficulty = difficulty;
+        sendJson(res, 200, {
+          muscleGroups: MUSCLE_GROUPS,
+          meta: MUSCLE_GROUP_META,
+          exercises: getExercises(filter),
+        });
+        return;
+      }
+
+      if (req.method === "GET" && pathname === "/api/workout/plan") {
+        const { generateWeeklyPlan } = await import("./services/workoutGenerator.js");
+        const muscleGroup = String(url.searchParams.get("muscleGroup") || "biceps").trim();
+        const difficulty = String(url.searchParams.get("difficulty") || "beginner").trim();
+        sendJson(res, 200, generateWeeklyPlan(muscleGroup, difficulty));
+        return;
+      }
+
+      if (req.method === "GET" && pathname === "/api/workout/progress") {
+        const tracker = await import("./services/workoutTracker.js");
+        const planId = String(url.searchParams.get("planId") || "biceps-beginner-weekly").trim();
+        const state = tracker.loadProgress(planId);
+        sendJson(res, 200, {
+          ...state,
+          streak: tracker.computeStreak(state.completedDays),
+        });
+        return;
+      }
+
+      if (req.method === "GET" && pathname === "/api/workout/progress-stats") {
+        const { getProgressStatsForPlan } = await import("./services/progressStats.js");
+        const { generateWeeklyPlan } = await import("./services/workoutGenerator.js");
+        const planId = String(url.searchParams.get("planId") || "biceps-beginner-weekly").trim();
+        const muscleGroup = String(url.searchParams.get("muscleGroup") || "biceps").trim();
+        const difficulty = String(url.searchParams.get("difficulty") || "beginner").trim();
+        const yearParam = url.searchParams.get("year");
+        const monthParam = url.searchParams.get("month");
+        const options = {};
+        if (yearParam != null && yearParam !== "") {
+          options.year = Number(yearParam);
+        }
+        if (monthParam != null && monthParam !== "") {
+          options.month = Number(monthParam);
+        }
+        const plan = generateWeeklyPlan(muscleGroup, difficulty);
+        sendJson(res, 200, getProgressStatsForPlan(planId, plan, options));
+        return;
+      }
+
+      if (req.method === "PATCH" && pathname === "/api/workout/progress") {
+        const body = await readJsonBody(req);
+        const planId = String(body?.planId || "biceps-beginner-weekly").trim();
+        const dayId = String(body?.dayId || "").trim();
+        const exerciseId = String(body?.exerciseId || "").trim();
+        const done = body?.done !== false;
+        if (!dayId || !exerciseId) {
+          sendJson(res, 400, { error: "Expected planId, dayId, exerciseId" });
+          return;
+        }
+        const { generateWeeklyPlan } = await import("./services/workoutGenerator.js");
+        const tracker = await import("./services/workoutTracker.js");
+        const muscleGroup = String(body?.muscleGroup || "biceps").trim();
+        const difficulty = String(body?.difficulty || "beginner").trim();
+        const plan = generateWeeklyPlan(muscleGroup, difficulty);
+        const current = tracker.loadProgress(planId);
+        const result = tracker.toggleExercise(plan, dayId, exerciseId, done, current);
+        sendJson(res, 200, {
+          ...result.state,
+          streak: result.streak,
+          milestone: result.milestone,
+          dayProgress: result.dayProgress,
+        });
+        return;
+      }
+
+      if (req.method === "GET" && pathname === "/api/events") {
+        const { getUpcomingEvents } = await import("./services/event-service.js");
+        sendJson(res, 200, { events: getUpcomingEvents() });
+        return;
+      }
+
+      const eventMatch = pathname.match(/^\/api\/events\/([^/]+)$/);
+      if (req.method === "GET" && eventMatch) {
+        const { getEventById, getSetlist, getCheeringGuide, getCountdown } =
+          await import("./services/event-service.js");
+        const eventId = decodeURIComponent(eventMatch[1]);
+        const event = getEventById(eventId);
+        if (!event) {
+          sendJson(res, 404, { error: "Event not found" });
+          return;
+        }
+        sendJson(res, 200, {
+          event,
+          setlist: getSetlist(eventId),
+          cheeringGuide: getCheeringGuide(eventId),
+          countdown: getCountdown(event.date),
+        });
+        return;
+      }
+
+      if (req.method === "GET" && pathname === "/api/training-plans") {
+        const { listTrainingPlans } = await import("./services/trainingService.js");
+        sendJson(res, 200, { plans: listTrainingPlans() });
+        return;
+      }
+
+      const trainingPlanMatch = pathname.match(/^\/api\/training-plans\/([^/]+)$/);
+      if (req.method === "GET" && trainingPlanMatch) {
+        const { getTrainingPlanById } = await import("./services/trainingService.js");
+        const plan = getTrainingPlanById(decodeURIComponent(trainingPlanMatch[1]));
+        if (!plan) {
+          sendJson(res, 404, { error: "Training plan not found" });
+          return;
+        }
+        sendJson(res, 200, plan);
+        return;
+      }
+
+      if (req.method === "POST" && pathname === "/api/training-plans") {
+        const body = await readJsonBody(req);
+        const muscleGroup = String(body?.muscleGroup || "biceps").trim();
+        const difficulty = String(body?.difficulty || "beginner").trim();
+        const source = body?.source === "chat" ? "chat" : "planner";
+        const { generateAndSavePlan } = await import("./services/trainingService.js");
+        sendJson(res, 201, generateAndSavePlan(muscleGroup, difficulty, source));
         return;
       }
 
@@ -242,8 +383,10 @@ function startServer(options = {}) {
         });
 
         let answer = "";
+        const chatMessages =
+          body?.regenerate === true ? stripLastAssistantReply(messages) : messages;
         try {
-          answer = await eva.askChat(messages, {
+          answer = await eva.askChat(chatMessages, {
             attachments: body?.attachments,
             onProgress: (info) => {
               const stage = info?.stage || "think";
@@ -255,11 +398,17 @@ function startServer(options = {}) {
           sendSse(res, { stage: "answer", message: answer });
           sendSse(res, { stage: "done", message: "完成" });
         } catch (err) {
-          console.error("[Eva][API] /api/chat error:", err?.stack || err?.message || err);
-          sendSse(res, {
-            stage: "error",
-            message: `Server error: ${String(err?.message || err)}`,
-          });
+          const fallback = resolveBalanceFallback(err, { logTag: "[Eva][API]" });
+          if (fallback) {
+            sendSse(res, { stage: "answer", message: fallback.message });
+            sendSse(res, { stage: "done", message: "完成" });
+          } else {
+            console.error("[Eva][API] /api/chat error:", err?.stack || err?.message || err);
+            sendSse(res, {
+              stage: "error",
+              message: `Server error: ${String(err?.message || err)}`,
+            });
+          }
         }
         res.end();
         return;
@@ -276,6 +425,11 @@ function startServer(options = {}) {
         } catch (_) {}
       }
     }
+  });
+
+  let wsSync = attachWsSync(server, {
+    getToken: () => token,
+    loadHistory: () => eva.loadChatHistory(),
   });
 
   return new Promise((resolve, reject) => {

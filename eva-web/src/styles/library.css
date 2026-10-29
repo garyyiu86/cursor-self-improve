@@ -1,0 +1,765 @@
+/* Exercise library full page */
+.lib-page {
+  min-height: 100%;
+  padding: 12px 14px 24px;
+  background: linear-gradient(180deg, #fff 0%, var(--eva-pink-soft, #fff5f7) 100%);
+  overflow-y: auto;
+}
+
+.lib-page-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.lib-page-back {
+  font-size: 0.82em;
+  color: #9d174d;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+
+.lib-page-back:hover {
+  text-decoration: underline;
+}
+
+.lib-page-title {
+  margin: 0;
+  font-size: 1.05em;
+  font-weight: 700;
+  color: #4a1f2e;
+}
+
+.lib-page-intro {
+  margin: 0 0 12px;
+  font-size: 0.78em;
+  color: var(--muted, #6b7280);
+  line-height: 1.4;
+}
+
+.lib-page-count {
+  color: #9d174d;
+  font-weight: 650;
+}
+
+.lib-page-status,
+.lib-page-notice {
+  font-size: 0.82em;
+  color: var(--muted, #6b7280);
+  margin: 0 0 12px;
+}
+
+.lib-page-notice {
+  color: #9d174d;
+}
+
+/* Shared track nav (also used on workout + dashboard pages) */
+.lib-track-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding: 6px;
+  border-radius: 12px;
+  border: 1px solid var(--eva-pink-border, #ffb7c5);
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.lib-track-nav-link {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 0.74em;
+  font-weight: 650;
+  color: #7c3a55;
+  text-decoration: none;
+  text-align: center;
+  transition: background 0.15s ease;
+}
+
+.lib-track-nav-link:hover {
+  background: var(--eva-pink-soft, #fff5f7);
+}
+
+.lib-track-nav-link--active {
+  background: var(--eva-pink, #ffb7c5);
+  color: #4a1f2e;
+  box-shadow: 0 2px 6px rgba(255, 183, 197, 0.4);
+}
+
+/* Muscle filters */
+.lib-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 4px 0 8px;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.98) 75%,
+    rgba(255, 255, 255, 0) 100%
+  );
+}
+
+.lib-filter-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--eva-silver-border, #d1d5db);
+  background: rgba(255, 255, 255, 0.92);
+  color: #4a1f2e;
+  font-size: 0.72em;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.lib-filter-btn:hover {
+  border-color: var(--eva-pink, #ffb7c5);
+  background: var(--eva-pink-soft, #fff5f7);
+}
+
+.lib-filter-btn--active {
+  border-color: var(--eva-pink, #ffb7c5);
+  background: var(--eva-pink, #ffb7c5);
+  box-shadow: 0 2px 8px rgba(255, 183, 197, 0.45);
+}
+
+.lib-filter-emoji {
+  font-size: 0.95em;
+  line-height: 1;
+}
+
+/* Grid */
+.lib-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+@media (min-width: 520px) {
+  .lib-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.lib-empty {
+  margin: 0;
+  padding: 20px 8px;
+  font-size: 0.8em;
+  color: var(--muted, #6b7280);
+  text-align: center;
+}
+
+.lib-card {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--eva-pink-border, #ffb7c5);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.94);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(192, 192, 192, 0.18);
+  transition:
+    box-shadow 0.18s ease,
+    transform 0.18s ease,
+    border-color 0.18s ease;
+}
+
+.lib-card:hover {
+  border-color: var(--eva-pink, #ffb7c5);
+  box-shadow: 0 6px 18px rgba(255, 183, 197, 0.38);
+  transform: translateY(-2px);
+}
+
+.lib-card-body {
+  padding: 10px 12px 12px;
+}
+
+.lib-card-name {
+  margin: 0 0 6px;
+  font-size: 0.82em;
+  font-weight: 700;
+  color: #4a1f2e;
+  line-height: 1.3;
+}
+
+.lib-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.lib-card-muscle {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--eva-silver-border, #d1d5db);
+  background: rgba(192, 192, 192, 0.12);
+  font-size: 0.68em;
+  font-weight: 600;
+  color: #5c4a52;
+}
+
+.lib-card-diff {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.66em;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.lib-card-diff--green {
+  background: rgba(34, 197, 94, 0.16);
+  color: #166534;
+  border: 1px solid rgba(34, 197, 94, 0.35);
+}
+
+.lib-card-diff--yellow {
+  background: rgba(234, 179, 8, 0.18);
+  color: #854d0e;
+  border: 1px solid rgba(234, 179, 8, 0.4);
+}
+
+.lib-card-diff--red {
+  background: rgba(239, 68, 68, 0.14);
+  color: #991b1b;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+}
+
+.lib-card-tip {
+  margin: 0;
+  font-size: 0.72em;
+  color: #6b7280;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* CSS-only form illustrations */
+.lib-illus {
+  position: relative;
+  height: 88px;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 183, 197, 0.22) 0%,
+    rgba(192, 192, 192, 0.12) 100%
+  );
+  border-bottom: 1px solid rgba(255, 183, 197, 0.25);
+  overflow: hidden;
+}
+
+.lib-illus--lg {
+  height: 100px;
+  width: 100px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  border: 1px solid var(--eva-pink-border, #ffb7c5);
+}
+
+.lib-illus-figure {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  width: 8px;
+  height: 28px;
+  margin-left: -4px;
+  border-radius: 4px;
+  background: #9d174d;
+}
+
+.lib-illus-figure::before,
+.lib-illus-figure::after {
+  content: "";
+  position: absolute;
+  border-radius: 3px;
+  background: #be185d;
+}
+
+/* Head */
+.lib-illus-figure::before {
+  top: -14px;
+  left: 50%;
+  width: 12px;
+  height: 12px;
+  margin-left: -6px;
+  border-radius: 50%;
+  background: #fda4af;
+}
+
+/* Default arms */
+.lib-illus-figure::after {
+  top: 4px;
+  left: 50%;
+  width: 36px;
+  height: 5px;
+  margin-left: -18px;
+  background: #be185d;
+}
+
+/* Pose variants */
+.lib-illus--curl .lib-illus-figure::after {
+  width: 28px;
+  height: 5px;
+  margin-left: -8px;
+  transform: rotate(-55deg);
+  transform-origin: left center;
+}
+
+.lib-illus--hammer-curl .lib-illus-figure::after {
+  width: 26px;
+  margin-left: -6px;
+  transform: rotate(-40deg);
+  transform-origin: left center;
+}
+
+.lib-illus--push-up {
+  background: linear-gradient(180deg, #fce7f3 0%, #f3f4f6 100%);
+}
+
+.lib-illus--push-up .lib-illus-figure {
+  width: 40px;
+  height: 6px;
+  margin-left: -20px;
+  bottom: 36px;
+  transform: rotate(-8deg);
+  border-radius: 3px;
+}
+
+.lib-illus--push-up .lib-illus-figure::before {
+  top: -8px;
+  left: auto;
+  right: -2px;
+  margin: 0;
+}
+
+.lib-illus--push-up .lib-illus-figure::after {
+  top: 6px;
+  width: 14px;
+  height: 4px;
+  margin-left: -18px;
+  transform: rotate(90deg);
+  transform-origin: right center;
+}
+
+.lib-illus--squat .lib-illus-figure {
+  height: 22px;
+  bottom: 22px;
+}
+
+.lib-illus--squat .lib-illus-figure::after {
+  width: 30px;
+  margin-left: -14px;
+  top: 18px;
+  transform: rotate(25deg);
+}
+
+.lib-illus--lunge .lib-illus-figure::after {
+  width: 34px;
+  margin-left: -16px;
+  top: 16px;
+  transform: rotate(18deg);
+}
+
+.lib-illus--plank .lib-illus-figure {
+  width: 44px;
+  height: 6px;
+  margin-left: -22px;
+  bottom: 40px;
+}
+
+.lib-illus--plank .lib-illus-figure::before {
+  top: -6px;
+  left: 2px;
+  margin: 0;
+}
+
+.lib-illus--jumping-jack .lib-illus-figure::after {
+  width: 44px;
+  margin-left: -22px;
+  transform: rotate(-25deg);
+}
+
+.lib-illus--stretch .lib-illus-figure::after {
+  width: 38px;
+  margin-left: -18px;
+  transform: rotate(-70deg);
+  transform-origin: left center;
+}
+
+.lib-illus--pull-apart .lib-illus-figure::after {
+  width: 48px;
+  margin-left: -24px;
+  background: linear-gradient(90deg, #be185d 0%, transparent 45%, transparent 55%, #be185d 100%);
+}
+
+.lib-illus--row .lib-illus-figure {
+  transform: rotate(12deg);
+}
+
+.lib-illus--row .lib-illus-figure::after {
+  width: 32px;
+  margin-left: -20px;
+  transform: rotate(35deg);
+}
+
+.lib-illus--lateral-raise .lib-illus-figure::after {
+  width: 40px;
+  margin-left: -20px;
+  transform: rotate(-90deg);
+  top: 2px;
+}
+
+.lib-illus--bench-press .lib-illus-figure {
+  width: 36px;
+  height: 5px;
+  margin-left: -18px;
+  bottom: 32px;
+  transform: rotate(-5deg);
+}
+
+.lib-illus--dip .lib-illus-figure {
+  bottom: 38px;
+}
+
+.lib-illus--dip .lib-illus-figure::after {
+  width: 24px;
+  margin-left: -10px;
+  transform: rotate(55deg);
+  transform-origin: left center;
+}
+
+.lib-illus--overhead-ext .lib-illus-figure::after {
+  width: 28px;
+  margin-left: -12px;
+  transform: rotate(-110deg);
+  transform-origin: left center;
+  top: -2px;
+}
+
+.lib-illus--kickback .lib-illus-figure {
+  transform: rotate(15deg);
+}
+
+.lib-illus--kickback .lib-illus-figure::after {
+  width: 30px;
+  margin-left: -18px;
+  transform: rotate(10deg);
+  top: 8px;
+}
+
+.lib-illus--bridge .lib-illus-figure {
+  width: 36px;
+  height: 5px;
+  margin-left: -18px;
+  bottom: 34px;
+  transform: rotate(-15deg);
+  border-radius: 8px;
+}
+
+.lib-illus--wall-sit .lib-illus-figure {
+  height: 20px;
+  bottom: 18px;
+}
+
+.lib-illus--wall-sit .lib-illus-figure::after {
+  top: 14px;
+  width: 26px;
+  transform: rotate(90deg);
+  margin-left: -12px;
+}
+
+.lib-illus--crunch .lib-illus-figure {
+  width: 32px;
+  height: 5px;
+  margin-left: -16px;
+  bottom: 30px;
+  transform: rotate(35deg);
+}
+
+.lib-illus--superman .lib-illus-figure {
+  width: 40px;
+  height: 5px;
+  margin-left: -20px;
+  bottom: 44px;
+}
+
+.lib-illus--superman .lib-illus-figure::after {
+  width: 20px;
+  margin-left: -24px;
+  top: -4px;
+  transform: rotate(-30deg);
+}
+
+.lib-illus--lat-pulldown .lib-illus-figure::after {
+  width: 28px;
+  margin-left: -12px;
+  transform: rotate(55deg);
+  transform-origin: left top;
+}
+
+.lib-illus--shoulder-press .lib-illus-figure::after {
+  width: 24px;
+  margin-left: -10px;
+  transform: rotate(-105deg);
+  transform-origin: left center;
+  top: -4px;
+}
+
+.lib-illus--fly .lib-illus-figure::after {
+  width: 42px;
+  margin-left: -20px;
+  transform: rotate(-15deg);
+  background: linear-gradient(90deg, #be185d, #fda4af, #be185d);
+}
+
+.lib-illus--calf-raise .lib-illus-figure {
+  height: 32px;
+  bottom: 10px;
+}
+
+.lib-illus--generic .lib-illus-figure::after {
+  opacity: 0.85;
+}
+
+/* Detail modal */
+.lib-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 12px;
+  background: rgba(74, 31, 46, 0.45);
+  backdrop-filter: blur(3px);
+}
+
+@media (min-width: 520px) {
+  .lib-modal-backdrop {
+    align-items: center;
+  }
+}
+
+.lib-modal {
+  width: 100%;
+  max-width: 420px;
+  max-height: min(88vh, 640px);
+  overflow-y: auto;
+  border-radius: 16px 16px 12px 12px;
+  border: 1px solid var(--eva-pink-border, #ffb7c5);
+  background: #fff;
+  box-shadow: 0 12px 40px rgba(157, 23, 77, 0.22);
+}
+
+@media (min-width: 520px) {
+  .lib-modal {
+    border-radius: 16px;
+  }
+}
+
+.lib-modal-head {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  align-items: start;
+  padding: 14px 14px 10px;
+  border-bottom: 1px solid rgba(255, 183, 197, 0.35);
+  background: linear-gradient(180deg, #fff5f7 0%, #fff 100%);
+}
+
+.lib-modal-titles {
+  min-width: 0;
+}
+
+.lib-modal-name {
+  margin: 0 0 6px;
+  font-size: 0.92em;
+  font-weight: 700;
+  color: #4a1f2e;
+  line-height: 1.3;
+}
+
+.lib-modal-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.lib-modal-equip {
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px dashed var(--eva-silver-border, #d1d5db);
+  font-size: 0.66em;
+  font-weight: 600;
+  color: #6b7280;
+}
+
+.lib-modal-prescription {
+  margin: 0;
+  font-size: 0.72em;
+  color: #9d174d;
+  font-weight: 650;
+}
+
+.lib-modal-close {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: rgba(255, 183, 197, 0.35);
+  color: #831843;
+  font-size: 1.2em;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.lib-modal-close:hover {
+  background: var(--eva-pink, #ffb7c5);
+}
+
+.lib-modal-body {
+  padding: 12px 14px 16px;
+}
+
+.lib-modal-section {
+  margin-bottom: 14px;
+}
+
+.lib-modal-section:last-child {
+  margin-bottom: 0;
+}
+
+.lib-modal-section-title {
+  margin: 0 0 8px;
+  font-size: 0.8em;
+  font-weight: 700;
+  color: #4a1f2e;
+}
+
+.lib-modal-list {
+  margin: 0;
+  padding-left: 1.2em;
+  font-size: 0.76em;
+  line-height: 1.5;
+  color: #374151;
+}
+
+.lib-modal-list li + li {
+  margin-top: 5px;
+}
+
+.lib-modal-list--mistakes li::marker {
+  color: #f59e0b;
+}
+
+.lib-modal-list:not(.lib-modal-list--mistakes) li::marker {
+  color: var(--eva-pink, #ffb7c5);
+  font-weight: 700;
+}
+
+.lib-modal-idol {
+  padding: 10px;
+  border-radius: 12px;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 183, 197, 0.2) 0%,
+    rgba(192, 192, 192, 0.12) 100%
+  );
+  border: 1px solid var(--eva-pink-border, #ffb7c5);
+}
+
+.lib-modal-idol-quote {
+  display: flex;
+  gap: 10px;
+  margin: 0;
+  align-items: flex-start;
+}
+
+.lib-modal-idol-avatar {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--eva-pink, #ffb7c5);
+  border: 2px solid #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72em;
+  font-weight: 800;
+  color: #831843;
+  box-shadow: 0 2px 6px rgba(255, 183, 197, 0.5);
+}
+
+.lib-modal-idol-quote p {
+  margin: 0;
+  font-size: 0.78em;
+  line-height: 1.5;
+  color: #4a1f2e;
+  font-style: italic;
+}
+
+.lib-modal-days {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lib-modal-day {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  gap: 6px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 183, 197, 0.35);
+  background: rgba(255, 255, 255, 0.85);
+  font-size: 0.74em;
+}
+
+.lib-modal-day-emoji {
+  font-size: 1.1em;
+  line-height: 1;
+}
+
+.lib-modal-day-label {
+  font-weight: 700;
+  color: #9d174d;
+  white-space: nowrap;
+}
+
+.lib-modal-day-title {
+  color: #4b5563;
+  line-height: 1.35;
+}
+
+.lib-modal-no-days {
+  margin: 0;
+  font-size: 0.76em;
+  color: var(--muted, #6b7280);
+  line-height: 1.45;
+}

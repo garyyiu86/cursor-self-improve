@@ -2,7 +2,7 @@
 
 Shared architecture:
 
-- **`eva-core`** — ask pipeline + HTTP/SSE API on `:8787`
+- **`eva-core`** — ask pipeline + HTTP/SSE API on `:8787` (WebSocket `/api/ws` for live chat-history sync + keep-alive reconnect)
 - **`eva-web`** — Vite chat UI (PC + Android)
 - **`overlay/`** — Electron shell (mascot, tray, drag; nightly auto-evolve)
 - **`eva-mobile/`** — Capacitor Android APK
@@ -14,13 +14,19 @@ Electron / Android APK
    eva-core :8787  →  Eva LLM (Ollama / OpenRouter / …)  或  騰訊雲 ADP
 ```
 
-UI 右上角可切 **Eva** / **騰訊雲**。騰訊雲模式會把最新一句 user 訊息送到 `https://wss.lke.tencentcloud.com/adp/v2/chat`，並每次帶上 Eva 人設（`SystemRole`）。事實題會先查本地 Postgres KB（miss 再 Tavily），把命中資料一併塞進 `SystemRole` 畀 ADP。ConversationId 由本機持久化；Clear 會開新會話。
+UI 右上角可切 **Eva** / **騰訊雲**。聊天輸入框：**Enter** 或 **Ctrl/Cmd+Enter** 送出訊息，**Shift+Enter** 換行（IME 組字中唔會誤送）。Eva 回覆右上角有 **↻** 掣，可以重新生成最後一輪回覆（`/api/chat` 亦支援 `{ regenerate: true }` 剝走尾端 assistant 再問）。騰訊雲模式會把最新一句 user 訊息送到 `https://wss.lke.tencentcloud.com/adp/v2/chat`，並每次帶上 Eva 人設（`SystemRole`）。事實題會先查本地 Postgres KB（miss 再 Tavily），把命中資料一併塞進 `SystemRole` 畀 ADP。ConversationId 由本機持久化；Clear 會開新會話。
+
+模型 API 餘額不足（`code:460032`）時，唔會再爆 raw error——`eva-core/fallback-messages.cjs` 統一返回星野玲語氣嘅 fallback 訊息；`chat-service.cjs` / `server.cjs` / `api.js` 會當正常回覆顯示，console 仍保留原始錯誤供 debug。
+
+連續重複相同問候（例如連續三次「hi」）時，`eva-core/dialogue-service.cjs` 會喺 LLM 之前識別模式，第 2 次起改用分層引導回覆（唔再重複自我介紹），引導用戶講今日想傾啲咩；一般非重複對話不受影響。
 
 ### 自動進化（騰訊雲想 → Cursor 改）
 
-Chatbox **冇** Apply / 自動進化掣。進化改為 **每晚 00:00** Windows 排程跑（`EvaNightlyEvolve`），唔使開 overlay。
+Chatbox **冇** Apply / 自動進化掣。**而家冇開每晚自動進化**（token 唔夠）；排程 `EvaNightlyEvolve` 已取消。想再開：`npm run eva:schedule-evolve`。手動跑仍可用 `npm run eva:evolve`。
 
-每輪可以係一個完整改進（幾個相關檔、必要時開新檔），預設最多 **4** 輪。唔會 commit；唔准改 `.env`、`overlay/data`、`sample/`、secrets。
+PC overlay 只有 **傾偈 + 角色**（500×420）。健身／心情／Live 頁面係 Android／完整 web 路由，唔好塞入 overlay 主畫面（會變成白畫面）。Overlay 閒置或睡眠喚醒會自動重載 UI。
+
+每輪可以係一個完整改進（幾個相關檔、必要時開新檔），預設最多 **4** 輪。騰訊雲只准出 **JSON 方案**（唔會當自己寫 code）；超時唔會把 thinking 旁白當答案。唔會 commit；唔准改 `.env`、`overlay/data`、`sample/`、secrets。
 
 完成紀錄寫入：
 
@@ -121,6 +127,61 @@ npm run eva:web:dev
 # set EVA_WEB_URL=http://127.0.0.1:5173 && npm run overlay
 ```
 
+### 健身訓練計劃（Workout Planner）
+
+Web UI 右上角 **健身** 連結，或 hash route `#/workout`，開啟每週訓練編排頁：
+
+- **`eva-core/services/exerciseLibrary.js`** — 40+ 動作、7 大肌群（二頭／三頭／胸／背／肩／腿／核心），含 LUMINA 偶像 form tips
+- **`eva-core/services/workoutPlanner.js`** — 產生 7 日 plan；`biceps` + `beginner` 同 chat 二頭肌線條表完全一致
+- **`eva-web/src/pages/WorkoutPlanner.jsx`** — 肌群 selector、難度 toggle、7 日 card
+- **`eva-core/services/progressCalculator.js`** — 從 localStorage sessions 計算 PR、重量／容量趨勢、成就、肌群平衡
+- **`eva-web/src/pages/WorkoutProgress.jsx`** — `#/workout/progress`：4 張 PR 卡、canvas 重量／容量圖、成就徽章、肌群橫條
+- **`eva-web/src/pages/WorkoutDashboard.jsx`** — 訓練紀錄摘要；有數據時連去進度頁
+- **`eva-web/src/components/TrainingWeekView.tsx`** + **`TrainingDayCard.tsx`** + **`RestTimer.tsx`** — `#/workout/plans/:id` 訓練日追蹤：逐組 checkbox、日／週進度條；勾選一組後自動開始組間休息計時（預設 60s，±15s 調整）；離開頁面或切換訓練日會暫停；進度存 `localStorage`（`eva-training-day-progress:*`）
+- **`#/workout/play`** — 引導式訓練 session（`SessionPlayer.tsx`）：任何訓練日撳「開始訓練 ▶」進入；顯示動作名、第 X/Y 組、「完成呢組」；組間圓形倒數（用該動作 `restSeconds`）+ 蜂鳴；Eva 開場／中場／收工應援；完結 summary（總時長、動作數、Eva 結語）；session 寫入 `eva-workout-sessions`
+- API：`GET /api/workout/library`、`GET /api/workout/plan?muscleGroup=biceps&difficulty=beginner`
+
+### 訓練連續打卡（Workout Streak Tracker）
+
+主頁 chat 下方 **`WorkoutTracker`**：顯示今日日期、打勾「完成今日訓練」、`StreakBadge` 火焰連續日數；3／7／14／30 日 milestone 彈 Eva 粵語鼓勵。資料存 `localStorage`（`eva-workout-streak-v1`），刷新唔會丟。
+
+- **`eva-web/src/utils/workoutStorage.ts`** — 日曆 key、streak 計算、milestone 偵測
+- **`eva-web/src/components/WorkoutTracker.tsx`** + **`StreakBadge.tsx`** + **`styles/workout.css`**
+
+### 心情日記（Mood & Journal）
+
+Web UI 右上角 **心情** 連結，或 hash route `#/mood`，開啟每日心情打卡同 timeline：
+
+- **`eva-core/services/mood-journal.js`** — localStorage 持久化；`logMood` / `getMoodHistory` / streak / stats / Eva 粵語鼓勵 / 偶像活動建議
+- **`eva-web/src/hooks/useMoodJournal.js`** — React state + 每日自動彈 check-in（未打卡時）
+- **`eva-web/src/components/MoodCheckIn.jsx`** — 5 級 emoji 選擇、備註、活動 tag、提交後 Eva 回應
+- **`eva-web/src/components/MoodTimeline.jsx`** + **`JournalEntry.jsx`** — 按週分組 timeline，「今個禮拜」櫻粉邊框
+- **`eva-web/src/components/MoodStreak.jsx`** — 連續打卡、心情分佈、每週趨勢
+- 聊天主頁（`#/``）每日首次開啟會自動彈 check-in modal
+
+### Live 應援（Event Countdown & Setlist）
+
+Web UI 右上角 **Live** 連結，或 hash route `#/live`，開啟 LUMINA 演出倒數、setlist 同應援指南：
+
+- **`eva-core/services/event-service.js`** — mock 3–4 場 LUMINA 演出；`getUpcomingEvents` / `getEventById` / `getCountdown` / `getSetlist` / `getCheeringGuide` / `formatCountdownString`（粵語倒數文案）
+- **`eva-web/src/hooks/useLiveEvent.js`** — 每秒更新倒數；`selectEvent()` / `refreshCountdown()`
+- **`eva-web/src/components/LiveCountdown.jsx`** — flip-card 倒數；今日櫻粉 glow；已過期應援訊息
+- **`eva-web/src/components/SetlistViewer.jsx`** — 曲目表（penlight 色、難度、call timing、Encore 分段、應援指南）
+- **`eva-web/src/components/EventCard.jsx`** — 演出選擇卡（票務狀態 badge）
+- **`eva-web/src/styles/live-event.css`** — 櫻粉 × 星光銀主題
+- API：`GET /api/events`、`GET /api/events/:id`
+
+### 推し配對分析（Oshi Match Analyzer）
+
+Web UI 右上角 **配對** 連結，或 hash route `#/oshi`，開啟 LUMINA 偶像配對測驗：
+
+- **`eva-core/services/oshi-matcher.js`** — 5 題粵語 quiz、`LUMINA_MEMBERS`（5 位虛構 member）、`GENRES` / `CHEER_STYLES`；`calculateMatch(answers)` 計 member／genre／style 配對度；`generateOshiCertificate()` 出粵語認證書
+- **`eva-core/oshi-match.cjs`** — chat intent「推し配對分析」等關鍵字；回覆 `:::oshi-match:::` 嵌入 CTA
+- **`eva-web/src/hooks/useOshiMatch.js`** — quiz state：intro → 5 題 → 計算 → 結果
+- **`eva-web/src/components/OshiQuiz.jsx`** — intro 星光動畫、進度條、選項卡 slide 過場、計算中畫面
+- **`eva-web/src/components/OshiResult.jsx`** + **`OshiProfileCard.jsx`** — 認證書、profile 卡、genre／style 配對、完整排名
+- **`eva-web/src/styles/oshi-match.css`** — 櫻粉 × 星光銀主題
+
 ## Android APK (local install)
 
 ### Prerequisites
@@ -158,7 +219,7 @@ Cleartext HTTP to the PC is enabled via `android:usesCleartextTraffic` + `networ
 2. Base URL: `http://<PC-LAN-IP>:8787`
 3. Token: same as `EVA_API_TOKEN` in `.env`
 4. Tap **測試連線** → should show `OK`
-5. **儲存** → chat + history sync with the PC
+5. **儲存** → chat + history sync with the PC (WebSocket with auto-reconnect; falls back to polling if the socket drops)
 
 ## Cloudflare Tunnel (public HTTPS → your PC)
 
@@ -238,7 +299,7 @@ Invoke-RestMethod -Headers @{ Authorization = "Bearer $token" } http://127.0.0.1
 | `npm run overlay` | Electron + embedded API + eva-web |
 | `npm run eva:evolve` | 騰訊雲出方案 → Cursor 落地（每輪可多數個檔，預設 4 輪） |
 | `npm run eva:nightly-evolve` | 即刻跑同午夜排程一樣嘅大型進化 |
-| `npm run eva:schedule-evolve` | 註冊／取消每晚 **00:00** 進化排程 |
+| `npm run eva:schedule-evolve` | 註冊／取消每晚 **00:00** 進化排程（而家已取消） |
 | `npm run eva:mobile:sync` | Build web + Capacitor sync |
 | `npm run eva:mobile:open` | Open Android Studio project |
 | `npm run eva:tunnel` | Cloudflare quick tunnel → local `:8787` |

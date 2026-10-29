@@ -12,6 +12,17 @@ const { resolveHistoryForModel } = require("./history.cjs");
 const { tavilySearch } = require("./tavily.cjs");
 const { formatFetchError, getLlmConfig, getLlmFallbackChain, llmChatOnce } = require("./llm.cjs");
 const { tencentLkeConfigured, tencentLkeChat } = require("./tencent-lke.cjs");
+const { resolveBalanceFallback } = require("./chat-service.cjs");
+const { resolveRepeatedGreeting } = require("./dialogue-service.cjs");
+const {
+  isTrainingPlanRequest,
+  formatTrainingPlanReply,
+  persistChatTrainingPlan,
+} = require("./training-plan.cjs");
+const {
+  isOshiMatchRequest,
+  formatOshiMatchReply,
+} = require("./oshi-match.cjs");
 const {
   normalizeAttachments,
   extractTextPrefix,
@@ -153,6 +164,28 @@ async function askOllama(historyMessages, { onProgress, attachments } = {}) {
     progress("done", "已取得日期時間");
     logTiming("ask total (datetime local)", tAll);
     return applyLanguageScript(answerDateTimeLocally(lang), lang);
+  }
+  if (!files.length && isTrainingPlanRequest(rawUser)) {
+    persistChatTrainingPlan();
+    progress("done", "訓練表");
+    logTiming("ask total (training plan)", tAll);
+    return applyLanguageScript(formatTrainingPlanReply(lang), lang);
+  }
+  if (!files.length && isOshiMatchRequest(rawUser)) {
+    progress("done", "推し配對");
+    logTiming("ask total (oshi match)", tAll);
+    return applyLanguageScript(formatOshiMatchReply(lang), lang);
+  }
+  if (!files.length) {
+    const repeatedGreeting = resolveRepeatedGreeting(rawUser, history, lang);
+    if (repeatedGreeting) {
+      console.log(
+        `[Eva][dialogue] repeated greeting x${repeatedGreeting.repeatCount} q="${rawUser.slice(0, 40)}"`,
+      );
+      progress("done", "完成");
+      logTiming("ask total (repeated greeting)", tAll);
+      return applyLanguageScript(repeatedGreeting.message, lang);
+    }
   }
   if (!files.length && isPersonaChangeRequest(rawUser)) {
     try {
@@ -669,6 +702,37 @@ async function askTencent(historyMessages, { onProgress, attachments } = {}) {
     }
   }
 
+  if (!files.length && isTrainingPlanRequest(rawUser)) {
+    persistChatTrainingPlan();
+    try {
+      onProgress?.({ stage: "done", message: "訓練表" });
+    } catch (_) {}
+    logTiming("ask total (tencent training plan)", tAll);
+    return applyLanguageScript(formatTrainingPlanReply(lang), lang);
+  }
+
+  if (!files.length && isOshiMatchRequest(rawUser)) {
+    try {
+      onProgress?.({ stage: "done", message: "推し配對" });
+    } catch (_) {}
+    logTiming("ask total (tencent oshi match)", tAll);
+    return applyLanguageScript(formatOshiMatchReply(lang), lang);
+  }
+
+  if (!files.length) {
+    const repeatedGreeting = resolveRepeatedGreeting(rawUser, history, lang);
+    if (repeatedGreeting) {
+      console.log(
+        `[Eva][dialogue] repeated greeting x${repeatedGreeting.repeatCount} q="${rawUser.slice(0, 40)}"`,
+      );
+      try {
+        onProgress?.({ stage: "done", message: "完成" });
+      } catch (_) {}
+      logTiming("ask total (tencent repeated greeting)", tAll);
+      return applyLanguageScript(repeatedGreeting.message, lang);
+    }
+  }
+
   try {
     onProgress?.({ stage: "think", message: "騰訊雲 ADP 對答中…" });
   } catch (_) {}
@@ -708,11 +772,18 @@ async function askTencent(historyMessages, { onProgress, attachments } = {}) {
   console.log(
     `[Eva] Tencent SystemRole chars=${systemRole.length} kb=${knowledgeSource || "none"}`,
   );
-  const text = await tencentLkeChat(rawUser, {
-    onProgress,
-    systemRole,
-    attachments: files,
-  });
+  let text;
+  try {
+    text = await tencentLkeChat(rawUser, {
+      onProgress,
+      systemRole,
+      attachments: files,
+    });
+  } catch (err) {
+    const fallback = resolveBalanceFallback(err);
+    if (fallback) return fallback.message;
+    throw err;
+  }
 
   if (wantFacts && !knowledgeNotes) {
     await rememberAnswerInKb(rawUser, text);

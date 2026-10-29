@@ -1,0 +1,247 @@
+.ws-page {
+  min-height: 100%;
+  padding: 12px 14px 20px;
+  overflow: auto;
+  background: linear-gradient(
+    165deg,
+    rgba(255, 255, 255, 0.98) 0%,
+    var(--eva-pink-soft) 50%,
+    var(--eva-silver-soft) 100%
+  );
+}
+
+.ws-header {
+  margin-bottom: 12px;
+}
+
+.ws-back {
+  color: #9d174d;
+  text-decoration: none;
+  font-size: 0.86em;
+  font-weight: 600;
+}
+
+.ws-back:hover {
+  text-decoration: underline;
+}
+
+.ws-header-main {
+  margin-top: 6px;
+}
+
+.ws-title {
+  margin: 0;
+  font-size: 1.05em;
+  color: #4a1f2e;
+}
+
+.ws-sub {
+  margin: 4px 0 0;
+  font-size: 0.82em;
+  color: var(--muted);
+}
+
+.ws-timer-card {
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid var(--eva-pink-border);
+  background: rgba(255, 255, 255, 0.92);
+  text-align: center;
+  margin-bottom: 10px;
+}
+
+.ws-timer-display {
+  font-size: 2.4em;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+  color: #831843;
+  line-height: 1.1;
+}
+
+.ws-timer-actions {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.ws-rest-banner {
+  margin-bottom: 10px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: linear-gradient(90deg, var(--eva-pink-soft), #fff);
+  border: 1px solid var(--eva-pink-border);
+  text-align: center;
+  font-size: 0.9em;
+  font-weight: 650;
+  color: #9d174d;
+}
+
+.ws-exercise-nav {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  margin-bottom: 10px;
+}
+
+.ws-ex-tab {
+  flex-shrink: 0;
+  border: 1px solid var(--eva-silver-border);
+  background: #fff;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 0.78em;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.ws-ex-tab--active {
+  border-color: var(--eva-pink);
+  background: var(--eva-pink-soft);
+  color: #831843;
+  font-weight: 650;
+}
+
+.ws-ex-tab-count {
+  font-size: 0.85em;
+  opacity: 0.85;
+}
+
+.ws-exercise-card {
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--eva-pink-border);
+  background: rgba(255, 255, 255, 0.9);
+  margin-bottom: 12px;
+}
+
+.ws-ex-name {
+  margin: 0;
+  font-size: 0.95em;
+  color: #4a1f2e;
+}
+
+.ws-ex-target {
+  margin: 4px 0 10px;
+  font-size: 0.82em;
+  color: var(--muted);
+}
+
+.ws-set-list {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ws-set-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--eva-pink-soft);
+  font-size: 0.84em;
+}
+
+.ws-set-num {
+  font-weight: 650;
+  color: #831843;
+}
+
+.ws-log-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  align-items: end;
+}
+
+.ws-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.78em;
+  color: var(--muted);
+}
+
+.ws-field input {
+  border: 1px solid var(--eva-silver-border);
+  border-radius: 8px;
+  padding: 8px;
+  font: inherit;
+  font-size: 1em;
+}
+
+.ws-log-form .ws-btn {
+  grid-column: 1 / -1;
+}
+
+.ws-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.ws-footer-stats {
+  margin: 0;
+  text-align: center;
+  font-size: 0.82em;
+  color: var(--muted);
+}
+
+.ws-btn {
+  border: 1px solid var(--eva-silver-border);
+  background: #fff;
+  color: var(--text);
+  border-radius: 10px;
+  padding: 8px 14px;
+  font: inherit;
+  font-size: 0.88em;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: center;
+  text-decoration: none;
+}
+
+.ws-btn--primary {
+  border-color: var(--eva-pink);
+  background: linear-gradient(135deg, var(--eva-pink-soft), #fff);
+  color: #831843;
+}
+
+.ws-btn--ghost {
+  background: transparent;
+}
+
+.ws-btn--finish {
+  border-color: #831843;
+  background: #831843;
+  color: #fff;
+}
+
+.ws-btn--finish:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ws-empty-note {
+  font-size: 0.88em;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+
+body.platform-desktop .ws-page {
+  max-height: 420px;
+}
+
+body.platform-android .ws-page {
+  height: 100%;
+}

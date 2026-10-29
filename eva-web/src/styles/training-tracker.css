@@ -1,0 +1,393 @@
+/* Training day tracker — checkable exercise cards + weekly progress */
+.tt-week {
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--eva-pink-border);
+  background: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.96) 0%,
+    var(--eva-pink-soft) 55%,
+    var(--eva-silver-soft) 100%
+  );
+  box-shadow: 0 2px 10px rgba(255, 183, 197, 0.16);
+}
+
+.tt-week-head {
+  margin-bottom: 10px;
+}
+
+.tt-week-title {
+  margin: 0 0 4px;
+  font-size: 1.05em;
+  font-weight: 700;
+  color: #4a1f2e;
+}
+
+.tt-week-sub {
+  margin: 0;
+  font-size: 0.84em;
+  color: var(--muted);
+}
+
+.tt-week-progress {
+  margin-bottom: 12px;
+}
+
+.tt-week-progress-label,
+.tt-progress-label {
+  margin-bottom: 4px;
+  font-size: 0.82em;
+  font-weight: 650;
+  color: #4a1f2e;
+}
+
+.tt-progress-track {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.65);
+  border: 1px solid var(--eva-silver-border);
+  overflow: hidden;
+}
+
+.tt-progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--eva-pink) 0%, #f472b6 100%);
+  transition: width 0.25s ease;
+  min-width: 0;
+}
+
+.tt-week-progress:not([aria-valuenow="0"]) .tt-progress-fill,
+.tt-progress:not([aria-valuenow="0"]) .tt-progress-fill {
+  min-width: 4px;
+}
+
+.tt-week-progress--complete .tt-progress-fill,
+.tt-progress--complete .tt-progress-fill {
+  background: linear-gradient(90deg, #22c55e 0%, #86efac 100%);
+}
+
+.tt-week-progress--complete .tt-week-progress-label,
+.tt-progress--complete .tt-progress-label {
+  color: #166534;
+}
+
+.tt-week-days {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tt-week-day {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--eva-silver-border);
+  background: rgba(255, 255, 255, 0.78);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tt-week-day:hover {
+  border-color: var(--eva-pink-border);
+  background: rgba(255, 255, 255, 0.95);
+}
+
+.tt-week-day:focus-visible {
+  outline: 2px solid var(--eva-pink);
+  outline-offset: 2px;
+}
+
+.tt-week-day--active {
+  border-color: var(--eva-pink);
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 2px 8px rgba(255, 183, 197, 0.22);
+}
+
+.tt-week-day--complete:not(.tt-week-day--active) {
+  border-color: #86efac;
+}
+
+.tt-week-day-emoji {
+  flex: 0 0 auto;
+  font-size: 1.15em;
+  line-height: 1;
+}
+
+.tt-week-day-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tt-week-day-label {
+  font-size: 0.86em;
+  font-weight: 650;
+  color: #334155;
+  line-height: 1.3;
+}
+
+.tt-week-day-meta {
+  font-size: 0.78em;
+  color: var(--muted);
+}
+
+.tt-week-day-bar {
+  flex: 0 0 48px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid var(--eva-silver-border);
+  overflow: hidden;
+}
+
+.tt-week-day-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--eva-pink) 0%, #f472b6 100%);
+  transition: width 0.25s ease;
+}
+
+.tt-week-day--complete .tt-week-day-bar-fill {
+  background: linear-gradient(90deg, #22c55e 0%, #86efac 100%);
+}
+
+.tt-day-card {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--eva-silver-border);
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.tt-day-card--complete {
+  border-color: #86efac;
+}
+
+.tt-day-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.tt-day-title-wrap {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.tt-day-title {
+  margin: 0 0 4px;
+  font-size: 0.95em;
+  font-weight: 650;
+  line-height: 1.35;
+  color: #334155;
+}
+
+.tt-day-emoji {
+  margin-right: 4px;
+}
+
+.tt-day-duration {
+  font-size: 0.8em;
+  color: var(--muted);
+}
+
+.tt-day-badge {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.78em;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.tt-day-badge--partial {
+  color: #64748b;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--eva-silver-border);
+}
+
+.tt-day-badge--complete {
+  color: #166534;
+  background: rgba(220, 252, 231, 0.95);
+  border: 1px solid #86efac;
+}
+
+.tt-day-note {
+  margin: 0 0 8px;
+  font-size: 0.84em;
+  color: #64748b;
+}
+
+.tt-progress {
+  margin-bottom: 10px;
+}
+
+.tt-exercise-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tt-exercise-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #cbd5e1;
+  background: rgba(255, 255, 255, 0.92);
+  transition: border-color 0.15s ease, background 0.15s ease, opacity 0.15s ease;
+}
+
+.tt-exercise-card--done {
+  opacity: 0.78;
+  border-color: #86efac;
+  background: rgba(240, 253, 244, 0.85);
+}
+
+.tt-exercise-card--done .tt-exercise-name,
+.tt-exercise-card--done .tt-exercise-meta {
+  text-decoration: line-through;
+}
+
+.tt-set-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tt-set-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--eva-silver-border);
+  background: rgba(255, 255, 255, 0.85);
+  font-size: 0.78em;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, opacity 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tt-set-row:hover {
+  border-color: var(--eva-pink-border);
+  background: #fff;
+}
+
+.tt-set-row--done {
+  border-color: #86efac;
+  background: rgba(240, 253, 244, 0.9);
+  opacity: 0.85;
+}
+
+.tt-set-row--done .tt-set-label {
+  text-decoration: line-through;
+  color: #64748b;
+}
+
+.tt-set-check {
+  width: 1em;
+  height: 1em;
+  margin: 0;
+  accent-color: var(--eva-pink);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.tt-set-label {
+  color: #475569;
+  font-weight: 600;
+  user-select: none;
+}
+
+.tt-exercise-body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.tt-exercise-name {
+  display: block;
+  font-size: 0.9em;
+  font-weight: 650;
+  color: #334155;
+  line-height: 1.35;
+}
+
+.tt-exercise-meta {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.8em;
+  color: var(--muted);
+}
+
+.tt-exercise-tip,
+.tt-exercise-idol {
+  margin: 4px 0 0;
+  font-size: 0.8em;
+  color: #64748b;
+  line-height: 1.4;
+}
+
+.tt-exercise-idol {
+  color: #9d174d;
+}
+
+.tt-day-rest {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 0.86em;
+  color: #64748b;
+  background: rgba(248, 250, 252, 0.9);
+}
+
+.tt-reset-wrap {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--eva-silver-border);
+  text-align: center;
+}
+
+.tt-reset-btn {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 0.8em;
+  color: #94a3b8;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.tt-reset-btn:hover {
+  color: #64748b;
+}
+
+.tt-reset-btn:focus-visible {
+  outline: 2px solid var(--eva-pink);
+  outline-offset: 2px;
+  border-radius: 4px;
+}

@@ -22,6 +22,30 @@ function timeoutSignal(ms) {
 }
 
 const QUICK_MS = 8000;
+const MODEL_BALANCE_CODE = "460032";
+
+function isModelBalanceErrorMessage(text) {
+  const s = String(text || "");
+  return (
+    new RegExp(`\\b${MODEL_BALANCE_CODE}\\b`).test(s) ||
+    /(应用)?模型余额不足|餘額不足|余额不足/i.test(s)
+  );
+}
+
+/** Keep in sync with eva-core/fallback-messages.cjs — 星野玲 persona. */
+function modelBalanceFallbackMessage() {
+  return "⚠️ 玲今日把聲用緊嘅能源有啲唔夠⋯⋯主辦方會盡快 recharge（充值）！你可以一陣再同我傾過。多謝你等陣～";
+}
+
+function resolveBalanceFromPayload(info) {
+  if (info?.code === "balance_exhausted" && info?.message) {
+    return String(info.message);
+  }
+  if (info?.error === true && info?.code === "balance_exhausted" && info?.message) {
+    return String(info.message);
+  }
+  return null;
+}
 
 export function mediaUrl(raw) {
   const href = String(raw || "").trim();
@@ -102,26 +126,96 @@ export async function clearChatHistory() {
   return parseJson(res);
 }
 
+export async function listTrainingPlans() {
+  const res = await fetch(apiUrl("/api/training-plans"), {
+    headers: authHeaders(),
+    signal: timeoutSignal(QUICK_MS),
+  });
+  return parseJson(res);
+}
+
+export async function getTrainingPlan(id) {
+  const res = await fetch(apiUrl(`/api/training-plans/${encodeURIComponent(id)}`), {
+    headers: authHeaders(),
+    signal: timeoutSignal(QUICK_MS),
+  });
+  return parseJson(res);
+}
+
+export async function fetchWorkoutPlan({ muscleGroup = "biceps", difficulty = "beginner" } = {}) {
+  const res = await fetch(
+    apiUrl(
+      `/api/workout/plan?muscleGroup=${encodeURIComponent(muscleGroup)}&difficulty=${encodeURIComponent(difficulty)}`,
+    ),
+    { headers: authHeaders(), signal: timeoutSignal(QUICK_MS) },
+  );
+  return parseJson(res);
+}
+
+export async function fetchWorkoutProgress(planId = "biceps-beginner-weekly") {
+  const res = await fetch(
+    apiUrl(`/api/workout/progress?planId=${encodeURIComponent(planId)}`),
+    { headers: authHeaders(), signal: timeoutSignal(QUICK_MS) },
+  );
+  return parseJson(res);
+}
+
+export async function patchWorkoutProgress({
+  planId = "biceps-beginner-weekly",
+  dayId,
+  exerciseId,
+  done = true,
+  muscleGroup = "biceps",
+  difficulty = "beginner",
+} = {}) {
+  const res = await fetch(apiUrl("/api/workout/progress"), {
+    method: "PATCH",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ planId, dayId, exerciseId, done, muscleGroup, difficulty }),
+  });
+  return parseJson(res);
+}
+
+export async function generateTrainingPlan({ muscleGroup = "biceps", difficulty = "beginner", source = "planner" } = {}) {
+  const res = await fetch(apiUrl("/api/training-plans"), {
+    method: "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({ muscleGroup, difficulty, source }),
+  });
+  return parseJson(res);
+}
+
 /**
  * POST /api/chat → SSE progress. Resolves with final answer string.
  * onProgress({ stage, message })
  */
-export async function askChat(messages, { onProgress, attachments } = {}) {
+export async function askChat(messages, { onProgress, attachments, regenerate } = {}) {
   const res = await fetch(apiUrl("/api/chat"), {
     method: "POST",
     headers: authHeaders({ "Content-Type": "application/json", Accept: "text/event-stream" }),
     body: JSON.stringify({
       messages: messages || [],
       attachments: Array.isArray(attachments) && attachments.length ? attachments : undefined,
+      regenerate: regenerate === true ? true : undefined,
     }),
   });
 
   if (!res.ok) {
     const text = await res.text();
-    let msg = text;
+    let data = null;
     try {
-      msg = JSON.parse(text)?.error || text;
+      data = text ? JSON.parse(text) : null;
     } catch (_) {}
+    const structured = resolveBalanceFromPayload(data);
+    if (structured) {
+      console.warn("[Eva] model balance exhausted (HTTP):", text);
+      return structured;
+    }
+    const msg = data?.message || data?.error || text;
+    if (isModelBalanceErrorMessage(msg)) {
+      console.warn("[Eva] model balance exhausted (HTTP):", msg);
+      return modelBalanceFallbackMessage();
+    }
     throw new Error(String(msg || `HTTP ${res.status}`));
   }
 
@@ -156,10 +250,21 @@ export async function askChat(messages, { onProgress, attachments } = {}) {
         }
         const stage = String(info?.stage || "");
         const message = String(info?.message ?? "");
+        const structured = resolveBalanceFromPayload(info);
+        if (structured) {
+          console.warn("[Eva] model balance exhausted (SSE):", structured);
+          answer = structured;
+          continue;
+        }
         if (stage === "answer") {
           answer = message;
         } else if (stage === "error") {
-          throw new Error(message || "Chat error");
+          if (isModelBalanceErrorMessage(message)) {
+            console.warn("[Eva] model balance exhausted (SSE error):", message);
+            answer = modelBalanceFallbackMessage();
+          } else {
+            throw new Error(message || "Chat error");
+          }
         } else {
           try {
             onProgress?.(info);

@@ -1,0 +1,207 @@
+[
+  {
+    "id": "tp-1789661014210-zqpz16",
+    "createdAt": "2026-09-17T16:03:34.209Z",
+    "source": "planner",
+    "muscleGroup": "biceps",
+    "difficulty": "beginner",
+    "title": "二頭肌線條每週訓練表",
+    "subtitle": "偶像級 7 日 schedule（Mon · Wed · Fri 主訓練）",
+    "motto": "楽しむことが一番",
+    "days": [
+      {
+        "id": "day-mon",
+        "dayIndex": 0,
+        "weekday": "一",
+        "emoji": "🌕",
+        "title": "二頭肌主訓練（Curl + Hammer + Push-up）",
+        "duration": "~20min",
+        "type": "workout",
+        "exercises": [
+          {
+            "id": "dumbbell-bicep-curl",
+            "name": "Dumbbell Bicep Curl（啞鈴彎舉）",
+            "sets": 3,
+            "reps": "12–15",
+            "rest": "45–60s",
+            "tip": "鎖緊手肘唔好郁，淨係前臂郁——上舉 2 秒、下降 3 秒。",
+            "idolContext": "似舞台上你做「比心」動作咁定點；LUMINA 排舞老師話控制比力度更重要。"
+          },
+          {
+            "id": "hammer-curl",
+            "name": "Hammer Curl（錘式彎舉）",
+            "sets": 3,
+            "reps": "12–15",
+            "rest": "45–60s",
+            "tip": "手掌相對，好似握住 penlight（應援棒）咁穩定。",
+            "idolContext": "排舞休息期間隨手拎水樽都得——肱肌同前臂一齊練，手臂睇落更厚。"
+          },
+          {
+            "id": "push-up",
+            "name": "Push-up（掌上壓）",
+            "sets": 2,
+            "reps": "12",
+            "rest": "60s",
+            "tip": "唔使完美，當 warm-up 同三頭協同，保持核心收緊。",
+            "idolContext": "朝早化妝前 2 組就夠——LUMINA 日常排練 combo 第一式。"
+          }
+        ]
+      },
+      {
+        "id": "day-tue",
+        "dayIndex": 1,
+        "weekday": "二",
+        "emoji": "🌑",
+        "title": "Active Recovery（拉伸放鬆）",
+        "duration": "15min",
+        "type": "recovery",
+        "exercises": [
+          {
+            "id": "arm-stretch-hold",
+            "name": "Arm & Shoulder Stretch（手臂肩膊拉伸）",
+            "sets": 1,
+            "reps": "30s each",
+            "rest": "—",
+            "tip": "手臂同膊頭伸展 5 分鐘——Active Recovery 必备。",
+            "idolContext": "LUMINA 夜晚拉伸 routine——排舞后放松先可以第二日继续。"
+          }
+        ],
+        "note": "輕鬆拉伸就得，唔使 push 到力竭。"
+      },
+      {
+        "id": "day-wed",
+        "dayIndex": 2,
+        "weekday": "三",
+        "emoji": "🔥",
+        "title": "全身燃脂＋Concentration Curl",
+        "duration": "~20min",
+        "type": "cardio",
+        "exercises": [
+          {
+            "id": "jumping-jack",
+            "name": "Jumping Jack（開合跳）",
+            "sets": 3,
+            "reps": "30s",
+            "rest": "30s",
+            "tip": "輕鬆節奏帶心率，排舞前 warm-up 都適用。",
+            "idolContext": "全身燃脂 combo——LUMINA 周三训练日 cardio 首选。"
+          },
+          {
+            "id": "bodyweight-squat",
+            "name": "Bodyweight Squat（徒手深蹲）",
+            "sets": 3,
+            "reps": "15",
+            "rest": "45s",
+            "tip": "腳掌穩定、膝頭跟腳尖方向，全身協調先有力。",
+            "idolContext": "激烈 choreography 嘅根基——跳完一整首靠腿力。"
+          },
+          {
+            "id": "concentration-curl",
+            "name": "Concentration Curl（集中彎舉）",
+            "sets": 3,
+            "reps": "12–15",
+            "rest": "45–60s",
+            "tip": "坐低做，專注 peak 收縮——似影相定點表情咁。",
+            "idolContext": "二頭肌 peak 位最 sharp，舞台 close-up 手臂線條靠呢招。"
+          }
+        ]
+      },
+      {
+        "id": "day-thu",
+        "dayIndex": 3,
+        "weekday": "四",
+        "emoji": "🌊",
+        "title": "輕量技術日（意念控制肌肉收縮）",
+        "duration": "~15min",
+        "type": "technique",
+        "exercises": [
+          {
+            "id": "slow-tempo-curl",
+            "name": "Slow Tempo Curl（慢节奏弯举）",
+            "sets": 2,
+            "reps": "10",
+            "rest": "60s",
+            "tip": "意念控制肌肉收縮——上 3 秒下 4 秒，唔追重量。",
+            "idolContext": "周四轻量技术日：排舞老师话「feel the muscle, not the weight」。"
+          },
+          {
+            "id": "hammer-curl",
+            "name": "Hammer Curl（錘式彎舉）",
+            "sets": 3,
+            "reps": "12–15",
+            "rest": "45–60s",
+            "tip": "手掌相對，好似握住 penlight（應援棒）咁穩定。",
+            "idolContext": "排舞休息期間隨手拎水樽都得——肱肌同前臂一齊練，手臂睇落更厚。"
+          }
+        ],
+        "note": "控制比力度更重要——上舉 2 秒 → 下降 3–4 秒。"
+      },
+      {
+        "id": "day-fri",
+        "dayIndex": 4,
+        "weekday": "五",
+        "emoji": "💪",
+        "title": "二頭肌主訓練（Incline + Reverse Curl）",
+        "duration": "~20min",
+        "type": "workout",
+        "exercises": [
+          {
+            "id": "incline-dumbbell-curl",
+            "name": "Incline Dumbbell Curl（上斜彎舉）",
+            "sets": 3,
+            "reps": "12–15",
+            "rest": "45–60s",
+            "tip": "上斜角度拉長長頭，離心 3 秒放落去先 sharp。",
+            "idolContext": "離心收縮同舞台上「慢動作定點」一樣——愈控制得好，線條愈靚。"
+          },
+          {
+            "id": "reverse-curl",
+            "name": "Reverse Curl（反握彎舉）",
+            "sets": 3,
+            "reps": "12–15",
+            "rest": "45–60s",
+            "tip": "前臂同肱肌一齊練，手臂線條會更完整。",
+            "idolContext": "推應援棒、mic stand 都要前臂穩定——偶像手臂唔係淨係二頭。"
+          },
+          {
+            "id": "band-pull-apart",
+            "name": "Band Pull-apart（彈力帶後拉）",
+            "sets": 2,
+            "reps": "15",
+            "rest": "45s",
+            "tip": "膊頭平衡收尾，舞台 posture 都會穩啲。",
+            "idolContext": "改善 round shoulder——长时间 mic 手姿势嘅解药。"
+          }
+        ]
+      },
+      {
+        "id": "day-sat",
+        "dayIndex": 5,
+        "weekday": "六",
+        "emoji": "🎵",
+        "title": "自由活動 — 跳舞／行山／游水都得！",
+        "duration": "隨心",
+        "type": "free",
+        "exercises": [],
+        "note": "LUMINA 休息日都可以輕鬆排舞或 cardio——開心就得 ✨"
+      },
+      {
+        "id": "day-sun",
+        "dayIndex": 6,
+        "weekday": "日",
+        "emoji": "😴",
+        "title": "完全休息 — 肌肉修復先係關鍵",
+        "duration": "—",
+        "type": "rest",
+        "exercises": [],
+        "note": "肌肉喺休息時先會生長——今日好好瞓 💤"
+      }
+    ],
+    "reminders": [
+      "用中輕重量（12–15 下做到力竭就夠）",
+      "控制節奏：上舉 2 秒 → 下降 3 秒（離心收縮先係線條秘密）",
+      "體脂配合先睇到線條，記得飲食都要留意下～",
+      "每星期 2–3 次主訓練就夠，休息 45–60 秒 keep 住 pump"
+    ]
+  }
+]

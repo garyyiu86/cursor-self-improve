@@ -2,6 +2,10 @@
  * Bootstrap so load/syntax errors exit cleanly instead of leaving a stuck Electron shell.
  * package.json "main" points here.
  */
+const { app } = require("electron");
+// Transparent always-on-top windows are otherwise treated as occluded and stop painting.
+app.commandLine.appendSwitch("disable-features", "CalculateNativeWinOcclusion");
+
 try {
   require("./main.cjs");
 } catch (err) {
